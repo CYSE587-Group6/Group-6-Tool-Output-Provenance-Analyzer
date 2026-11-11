@@ -104,3 +104,28 @@ Both annotated suspicious operations were detected, resulting in two true positi
 The analyzer also examined preceding Fetch events using task identifiers and ADOP sequence numbers. Same-session Fetch events from different tasks were reported separately as contextual evidence.
 
 Limitations: The results do not establish that a malicious Fetch instruction caused either suspicious operation. Injection detection is limited to the available Fetch content previews and predefined phrases. The evaluation uses a small test corpus, so these results should not be interpreted as a general detection accuracy rate.
+
+### Running the PoC v0.5 Analyzer
+
+The analyzer uses Python 3 and requires no additional third-party packages.
+
+To analyze an ADOP JSONL session and generate both JSON results and a human-readable security review, run:
+
+```bash
+python analyzer.py poisoned-file.jsonl -o results.json --review security_review.txt
+```
+
+**Output files:**
+
+- `results.json` — Machine-readable alerts, risk scores, detection findings, and provenance context.
+- `security_review.txt` — Human-readable security-lead report containing alert severity, evidence, source correlation, and review recommendations.
+
+To analyze a clean session, run:
+
+```bash
+python analyzer.py session-01\(clean\).jsonl -o clean_results.json --review clean_review.txt
+```
+
+The analyzer operates in passive-only mode. It reads existing ADOP logs without modifying the agent, model, MCP tools, or execution environment.
+
+The tool supports JSON and JSONL input formats.
