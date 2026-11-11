@@ -315,12 +315,56 @@ def correlate_events(records, alerts):
         task_id = alert.get("task_id")
         alert_index = alert.get("record_index")
 
+        
         if not task_id or alert_index is None:
             alert["correlation"] = {
                 "status": "insufficient_identifiers",
                 "note": "Cannot establish an event relationship."
             }
             continue
+
+        # Find earlier Fetch events from the same session.
+        session_id = get_value(records[alert_index], "session_id")
+        session_sources = []
+
+        if session_id:
+            for index, record in events_by_session.get(session_id, []):
+                # Use ADOP sequence numbers when available.
+                alert_seq = records[alert_index].get("seq")
+                source_seq = record.get("seq")
+
+                if alert_seq is not None and source_seq is not None:
+                    try:
+                        if int(source_seq) >= int(alert_seq):
+                            continue
+                    except (ValueError, TypeError):
+                        if index >= alert_index:
+                            continue
+                elif index >= alert_index:
+                    continue
+
+                source_tool = (
+                    get_value(record, "tool_name", "tool", "name", "method")
+                    or ""
+                ).lower()
+
+                if "fetch" not in source_tool:
+                    continue
+
+                # Keep same-task evidence separate from session context.
+                source_task = get_value(record, "task_id")
+                alert_task = get_value(records[alert_index], "task_id")
+
+                if source_task == alert_task:
+                    continue
+
+                session_sources.append({
+                    "record_index": index,
+                    "tool_name": source_tool,
+                    "seq": record.get("seq"),
+                    "relationship": "same_session_different_task",
+                })
+
 
         related_events = events_by_task.get(task_id, [])
 
@@ -400,7 +444,10 @@ def correlate_events(records, alerts):
             "status": status,
             "related_record_count": len(related_events),
             "possible_source_events": earlier_sources,
+            "same_session_source_events": session_sources,
+            "same_session_source_count": len(session_sources),
             "note": note,
+
         }
 
 
