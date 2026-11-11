@@ -196,11 +196,14 @@ def analyze_record(record, index):
             findings.append({
                 "category": "path_traversal_pattern",
                 "evidence": (
-                    f"{field_name} contains a parent-directory "
-                    f"traversal pattern: {value[:180]}"
+                    "A parent-directory traversal pattern "
+                    "was detected in a path-related field."
                 ),
+                "evidence_field": field_name,
+                "evidence_record_index": index,
             })
             score += 45
+
 
     # Check for potentially unsafe output arguments.
     tool_related = any(
