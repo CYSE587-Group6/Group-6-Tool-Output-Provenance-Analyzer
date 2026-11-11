@@ -70,7 +70,31 @@ def load_logs(file_path):
 
         return records
 
+def sanitize_record(record):
+    """Remove scenario labels and debugging metadata."""
+    excluded_fields = {
+        "scenario_tag",
+        "annotations",
+        "expected_alert",
+        "ground_truth",
+        "debug",
+    }
 
+    def clean(value):
+        if isinstance(value, dict):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if key not in excluded_fields
+            }
+
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+
+        return value
+
+    return clean(record)
+    
 def flatten_record(value, prefix=""):
     """Make nested log fields searchable."""
     fields = []
@@ -284,15 +308,19 @@ def correlate_events(records, alerts):
 
 
 def analyze_logs(records):
+    clean_records = [
+        sanitize_record(record) for record in records
+    ]
+    
     alerts = []
 
-    for index, record in enumerate(records):
+    for index, record in enumerate(clean_records):
         alert = analyze_record(record, index)
 
         if alert:
             alerts.append(alert)
 
-    correlate_events(records, alerts)
+    correlate_events(clean_records, alerts)
 
     return {
         "tool_name": (
