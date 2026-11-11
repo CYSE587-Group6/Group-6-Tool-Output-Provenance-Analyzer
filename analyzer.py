@@ -291,9 +291,12 @@ def correlate_events(records, alerts):
     in the same task/session.
 
     Correlation is not proof of causation."""
+   
     events_by_task = defaultdict(list)
+    events_by_session = defaultdict(list)
 
     for index, record in enumerate(records):
+
         task_id = get_value(
             record, "task_id", "session_id",
             "trace_id", "conversation_id"
@@ -301,6 +304,12 @@ def correlate_events(records, alerts):
 
         if task_id:
             events_by_task[task_id].append((index, record))
+            
+        session_id = get_value(record, "session_id")
+
+        if session_id:
+            events_by_session[session_id].append((index, record))
+
 
     for alert in alerts:
         task_id = alert.get("task_id")
@@ -317,10 +326,23 @@ def correlate_events(records, alerts):
 
         earlier_sources = []
 
+       
         for index, record in related_events:
-            # Only consider events preceding the flagged action.
-            if index >= alert_index:
+            # Prefer ADOP sequence numbers when available.
+            alert_seq = records[alert_index].get("seq")
+            source_seq = record.get("seq")
+
+            if alert_seq is not None and source_seq is not None:
+                try:
+                    if int(source_seq) >= int(alert_seq):
+                        continue
+                except (ValueError, TypeError):
+                    # Fall back to input order if sequence values are invalid.
+                    if index >= alert_index:
+                        continue
+            elif index >= alert_index:
                 continue
+
 
             tool_name = (
                 get_value(
@@ -413,7 +435,11 @@ def analyze_logs(records):
             "A suspicious pattern is not proof of an attack.",
             "Shared task IDs do not prove causation.",
             "Detection depends on the fields present in the logs.",
-            "This prototype does not modify ADOP or block actions.","Source-to-action correlation is based on available task IDs and input record order; it does not prove causation.",
+            "This prototype does not modify ADOP or block actions.",
+            "Source-to-action correlation uses available task IDs "
+            "and sequence numbers, with input-order fallback; "
+            "it does not prove causation.",
+
         ],
     }
 
