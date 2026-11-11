@@ -92,3 +92,15 @@ This implementation is an initial proof of concept for Deliverable 2. Future wor
 CYSE-587 — Cybersecurity Systems Engineering  
 George Mason University  
 Fall 2026
+
+## PoC v0.5 Testing and Evaluation
+
+This Tool Output Provenance & Injection Risk Analyzer was evaluated using two ADOP JSONL test sessions.
+
+The clean session contained 10 records and generated zero alerts. The poisoned session contained 12 records and generated two alerts: git_diff (HIGH, score 70) and git_show_worktree (MEDIUM, score 45).
+
+Both annotated suspicious operations were detected, resulting in two true positives and zero false negatives for those test cases. No alerts were generated in the clean session.
+
+The analyzer also examined preceding Fetch events using task identifiers and ADOP sequence numbers. Same-session Fetch events from different tasks were reported separately as contextual evidence.
+
+Limitations: The results do not establish that a malicious Fetch instruction caused either suspicious operation. Injection detection is limited to the available Fetch content previews and predefined phrases. The evaluation uses a small test corpus, so these results should not be interpreted as a general detection accuracy rate.
