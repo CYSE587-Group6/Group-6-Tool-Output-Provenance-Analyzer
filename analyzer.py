@@ -182,7 +182,10 @@ def analyze_record(record, index):
     findings = []
     score = 0
 
+   
     # Check path-like fields for parent-directory traversal.
+    detected_paths = set()
+
     for field_name, value in fields:
         path_field = any(
             word in field_name.lower()
@@ -193,6 +196,11 @@ def analyze_record(record, index):
         )
 
         if path_field and TRAVERSAL_PATTERN.search(value):
+            if value in detected_paths:
+                continue
+
+            detected_paths.add(value)
+
             findings.append({
                 "category": "path_traversal_pattern",
                 "evidence": (
@@ -202,7 +210,9 @@ def analyze_record(record, index):
                 "evidence_field": field_name,
                 "evidence_record_index": index,
             })
+
             score += 45
+
 
 
     # Check for potentially unsafe output arguments.
