@@ -116,6 +116,26 @@ def flatten_record(value, prefix=""):
     return fields
 
 
+def get_fetch_content(record):
+    
+    """Extract the content preview from an ADOP Fetch event.
+    Do not treat filenames, paths, or metadata as injection text. """
+    tool_name = str(
+        get_value(record, "tool_name", "tool", "name", "method")
+        or ""
+    ).lower()
+
+    if "fetch" not in tool_name:
+        return ""
+
+    content = record.get("result_summary")
+
+    if not isinstance(content, str):
+        return ""
+
+    return content[:200]
+
+
 def get_value(record, *keys):
     """Return the first available field from a log record."""
     for key in keys:
@@ -153,7 +173,6 @@ def analyze_record(record, index):
     searchable_text = "\n".join(
         f"{name}: {value}" for name, value in fields
     )
-    text_lower = searchable_text.lower()
 
     tool_name = (
         get_value(record, "tool_name", "tool", "name", "method")
@@ -199,23 +218,29 @@ def analyze_record(record, index):
         })
         score += 25
 
-    # Look for possible prompt-injection language.
+     # Check retrieved Fetch content for possible prompt injection.
+    # Do not search filenames, paths, or debugging metadata.
+    fetch_content = get_fetch_content(record).lower()
+
     matched_phrases = [
         phrase for phrase in INJECTION_PHRASES
-        if phrase in text_lower
+        if phrase in fetch_content
     ]
 
-    if matched_phrases:
+       if matched_phrases:
         findings.append({
             "category": "prompt_injection_like_text",
             "evidence": (
-                "Possible instruction-override language: "
-                + ", ".join(matched_phrases[:3])
+                "Possible instruction-override language detected "
+                "in the Fetch result_summary content preview."
             ),
+            "matched_rule_count": len(matched_phrases),
         })
         score += 20
 
-    if not findings:
+           
+
+      if not findings:
         return None
 
     score = min(score, 100)
