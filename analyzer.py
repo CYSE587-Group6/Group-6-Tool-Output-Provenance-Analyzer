@@ -491,6 +491,58 @@ def analyze_logs(records):
     }
 
 
+def create_review_summary(report):
+    """Create a readable security review summary."""
+    lines = [
+        "GROUP 6 - SECURITY-LEAD REVIEW",
+        "=" * 40,
+        f"Records analyzed: {report['records_analyzed']}",
+        f"Alerts found: {report['alerts_found']}",
+        f"Analysis mode: {report['analysis_mode']}",
+        "",
+    ]
+
+    if not report["alerts"]:
+        lines.append("No suspicious activity detected by current rules.")
+    else:
+        for number, alert in enumerate(report["alerts"], 1):
+            correlation = alert.get("correlation", {})
+
+            lines.extend([
+                f"ALERT {number}",
+                f"Tool: {alert['tool_name']}",
+                f"Risk: {alert['risk']}",
+                f"Heuristic score: {alert['heuristic_score']}",
+                f"Record index: {alert['record_index']}",
+                f"Task ID: {alert.get('task_id') or 'Unavailable'}",
+                f"Timestamp: {alert.get('timestamp') or 'Unavailable'}",
+                f"Correlation: {correlation.get('status', 'Unknown')}",
+                "Findings:",
+            ])
+
+            for finding in alert["findings"]:
+                lines.append(
+                    f"  - {finding['category']}: {finding['evidence']}"
+                )
+
+            lines.extend([
+                f"Same-task sources: "
+                f"{len(correlation.get('possible_source_events', []))}",
+                f"Cross-task session sources: "
+                f"{correlation.get('same_session_source_count', 0)}",
+                f"Recommendation: {alert['review_recommendation']}",
+                "-" * 40,
+            ])
+
+    lines.extend([
+        "",
+        "LIMITATIONS",
+        "Correlation does not prove causation.",
+        "Scores are heuristic, not attack probabilities.",
+    ])
+
+    return "\n".join(lines)
+
 def main():
     parser = argparse.ArgumentParser(
         description="Passively analyze structured tool logs."
@@ -503,12 +555,25 @@ def main():
         "-o", "--output",
         help="Optional path for the JSON results"
     )
+    
+    parser.add_argument(
+        "--review",
+        help="Optional path for the human-readable security review report"
+    )
+
     args = parser.parse_args()
 
     try:
         records = load_logs(args.input)
         report = analyze_logs(records)
         output = json.dumps(report, indent=2)
+
+        if args.review:
+            review_text = create_review_summary(report)
+            Path(args.review).write_text(
+                review_text + "\n", encoding="utf-8"
+            )
+            print(f"Security review saved to: {args.review}")
 
         if args.output:
             Path(args.output).write_text(
