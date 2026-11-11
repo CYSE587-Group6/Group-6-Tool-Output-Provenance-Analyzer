@@ -221,7 +221,8 @@ def analyze_record(record, index):
         })
         score += 25
 
-     # Check retrieved Fetch content for possible prompt injection.
+    
+    # Check retrieved Fetch content for possible prompt injection.
     # Do not search filenames, paths, or debugging metadata.
     fetch_content = get_fetch_content(record).lower()
 
@@ -230,7 +231,7 @@ def analyze_record(record, index):
         if phrase in fetch_content
     ]
 
-       if matched_phrases:
+    if matched_phrases:
         findings.append({
             "category": "prompt_injection_like_text",
             "evidence": (
@@ -241,10 +242,12 @@ def analyze_record(record, index):
         })
         score += 20
 
-           
 
-      if not findings:
+
+    
+    if not findings:
         return None
+
 
     score = min(score, 100)
 
@@ -272,9 +275,12 @@ def analyze_record(record, index):
     },
  }
 
-
+    
 def correlate_events(records, alerts):
-    """Group events using IDs when available; do not infer causation."""
+    """ Correlate suspicious actions with earlier Fetch events
+    in the same task/session.
+
+    Correlation is not proof of causation."""
     events_by_task = defaultdict(list)
 
     for index, record in enumerate(records):
@@ -288,51 +294,83 @@ def correlate_events(records, alerts):
 
     for alert in alerts:
         task_id = alert.get("task_id")
+        alert_index = alert.get("record_index")
 
-        if not task_id:
+        if not task_id or alert_index is None:
             alert["correlation"] = {
                 "status": "insufficient_identifiers",
-                "note": "No task/session ID is available for grouping.",
+                "note": "Cannot establish an event relationship."
             }
             continue
 
-        related_events = events_by_task[task_id]
+        related_events = events_by_task.get(task_id, [])
 
-        possible_sources = [
-            get_identity(record, index)
-            for index, record in related_events
-            if any(
-                name in (
-                    get_value(
-                        record, "tool_name", "tool", "name", "method"
-                    ) or ""
-                ).lower()
-                for name in SOURCE_TOOL_NAMES
-            )
+        earlier_sources = []
+
+        for index, record in related_events:
+            # Only consider events preceding the flagged action.
+            if index >= alert_index:
+                continue
+
+            tool_name = (
+                get_value(
+                    record, "tool_name", "tool", "name", "method"
+                ) or ""
+            ).lower()
+
+            if not any(
+                name in tool_name for name in SOURCE_TOOL_NAMES
+            ):
+                continue
+
+            fetch_content = get_fetch_content(record).lower()
+
+            matched_phrases = [
+                phrase for phrase in INJECTION_PHRASES
+                if phrase in fetch_content
+            ]
+
+            earlier_sources.append({
+                "record_index": index,
+                "tool_name": tool_name,
+                "suspicious_content_detected": bool(matched_phrases),
+                "matched_rule_count": len(matched_phrases),
+            })
+
+        suspicious_sources = [
+            source for source in earlier_sources
+            if source["suspicious_content_detected"]
         ]
 
-        if possible_sources:
-            status = "same_task_source_event_found"
+        if suspicious_sources:
+            status = "suspicious_prior_source_found"
             note = (
-                "A source-like event shares this task ID. "
-                "This is a candidate relationship, not proof of causation."
+                "A prior Fetch/source event contained suspicious "
+                "instruction-like content. A later action occurred "
+                "in the same task. This is a candidate relationship, "
+                "not proof of causation."
             )
-        elif len(related_events) > 1:
-            status = "same_task_only"
+        elif earlier_sources:
+            status = "prior_source_found"
             note = (
-                "Events share a task ID, but no source event "
-                "could be identified from the available fields."
+                "Earlier source events were found, but no "
+                "injection phrases were detected in their "
+                "available content previews."
             )
         else:
-            status = "single_record"
-            note = "No related records were found for this task ID."
+            status = "no_prior_source_found"
+            note = (
+                "No earlier source event could be identified "
+                "from the available records."
+            )
 
         alert["correlation"] = {
             "status": status,
             "related_record_count": len(related_events),
-            "possible_source_events": possible_sources,
+            "possible_source_events": earlier_sources,
             "note": note,
         }
+
 
 
 def analyze_logs(records):
