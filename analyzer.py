@@ -1,4 +1,3 @@
-
 import json
 import re
 import argparse
@@ -213,8 +212,13 @@ def analyze_record(record, index):
             "Human review recommended; verify the source event, "
             "tool arguments, and intended target."
         ),
-        "raw_evidence": record,
-    }
+        "evidence_reference": {
+            "record_index": index,
+            "session_id": get_value(record, "session_id"),
+            "task_id": get_value(record, "task_id"),
+            "seq": record.get("seq"),
+    },
+ }
 
 
 def correlate_events(records, alerts):
