@@ -413,7 +413,7 @@ def analyze_logs(records):
             "A suspicious pattern is not proof of an attack.",
             "Shared task IDs do not prove causation.",
             "Detection depends on the fields present in the logs.",
-            "This prototype does not modify ADOP or block actions.",
+            "This prototype does not modify ADOP or block actions.","Source-to-action correlation is based on available task IDs and input record order; it does not prove causation.",
         ],
     }
 
