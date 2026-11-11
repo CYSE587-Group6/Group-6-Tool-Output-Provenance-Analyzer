@@ -183,17 +183,20 @@ def analyze_record(record, index):
     score = 0
 
    
-    # Check path-like fields for parent-directory traversal.
-transversal_detected = False
+        # Check path-like fields for parent-directory traversal.
+        traversal_detected = False
 
-    for field_name, value in fields:
-        path_field = any(
-            word in field_name.lower()
-            for word in (
-                "path", "pathspec", "target_resource",
-                "filename", "directory"
+
+
+
+        for field_name, value in fields:
+            path_field = any(
+                word in field_name.lower()
+                for word in (
+                    "path", "pathspec", "target_resource",
+                    "filename", "directory"
+                )
             )
-        )
 
         if path_field and TRAVERSAL_PATTERN.search(value):
 
