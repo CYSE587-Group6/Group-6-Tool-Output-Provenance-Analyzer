@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-The Tool Output Provenance & Injection Risk Analyzer is a passive-only proof of concept developed for CYSE-587 / SYST-687 Deliverable 2.
+The Tool Output Provenance & Injection Risk Analyzer is a passive-only proof of concept developed for CYSE-587.
 
 The tool analyzes structured JSON and JSONL tool-call logs from the ADOP testbed to identify potentially suspicious activity, including prompt-injection-like language, suspicious Git arguments, and path traversal patterns.
 
@@ -85,7 +85,7 @@ These results demonstrate that the prototype runs against the listed inputs and 
 
 ## Project Scope
 
-This implementation is an initial proof of concept for Deliverable 2. Future work may include improved event correlation, evaluation across additional clean and poisoned scenarios, and refinement of risk scoring.
+This implementation is an initial proof of concept for Deliverable 2 & 3. Future work may include improved event correlation, evaluation across additional clean and poisoned scenarios, and refinement of risk scoring.
 
 ## Course
 
