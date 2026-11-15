@@ -295,7 +295,7 @@ def analyze_logs(records):
             "Group 6 Tool Output Provenance "
             "& Injection Risk Analyzer"
         ),
-        "version": "0.1",
+        "version": "0.5",
         "analysis_mode": "passive_only",
         "records_analyzed": len(records),
         "alerts_found": len(alerts),
