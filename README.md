@@ -95,32 +95,41 @@ The interface supports uploading ADOP-derived JSON or JSONL logs, displaying ran
 
 ### Running the Interface
 
-Install the required dependencies:
+1. Download the Repository
 
-```bash
+Open the GitHub repository and select the Deliverable-3-poc-v0.5 branch.
+
+Click Code → Download ZIP.
+
+Extract the ZIP file to a folder on your computer.
+
+Alternatively, users familiar with Git can clone the repository and switch to the Deliverable 3 branch.
+
+2. Open a Terminal
+
+Navigate to the extracted repository folder containing app.py, analyzer.py, and requirements.txt.
+
+3. Install Dependencies
+
+Run:
+
 python3 -m pip install -r requirements.txt
-```
 
-Launch the dashboard:
+4. Launch the Dashboard
 
-```bash
+Run:
+
 python3 -m streamlit run app.py
-```
 
-The dashboard opens at `http://localhost:8501`.
+The dashboard should automatically open in your browser at http://localhost:8501.
 
-Upload an ADOP-derived log file to run the analysis.
+5. Analyze ADOP Logs
 
-### Expected Results
+Upload a JSON or JSONL log file using the dashboard.
 
-- **Clean session:** 10 records analyzed, 0 alerts.
-- **Poisoned session:** 12 records analyzed, 2 alerts.
-  - `git_diff`: HIGH risk, score 70.
-  - `git_show_worktree`: MEDIUM risk, score 45.
+The interface displays ranked security alerts, heuristic risk scores, provenance context, and supporting evidence. The FinTech Security Lead can select Approve, Investigate, or Hold, add reviewer notes, and export the decisions as JSON.
 
-Reviewers can inspect alert evidence, select a decision, add notes, and export their decisions as JSON.
-
-The interface operates in passive Static mode. It does not modify ADOP, block tool operations, or prove that correlated events are causally related.
+The dashboard operates in passive Static mode and does not modify ADOP or block tool operations.
 
 ## 7. Detection and Provenance Analysis
 
