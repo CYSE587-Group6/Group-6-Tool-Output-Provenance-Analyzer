@@ -93,44 +93,45 @@ The PoC includes a Streamlit frontend for the FinTech Security Lead to review se
 
 The interface supports uploading ADOP-derived JSON or JSONL logs, displaying ranked alerts and heuristic risk scores, examining provenance correlation and supporting evidence, and recording reviewer decisions (Approve, Investigate, or Hold).
 
-### Running the Interface
+### Running the Streamlit Interface
 
-1. Download the Repository
+**1. Download the Repository**
 
-Open the GitHub repository and select the Deliverable-3-poc-v0.5 branch.
-
-Click Code → Download ZIP.
-
-Extract the ZIP file to a folder on your computer.
+- Open the GitHub repository and select the `Deliverable-3-poc-v0.5` branch.
+- Click **Code → Download ZIP**.
+- Extract the ZIP file to a folder on your computer.
 
 Alternatively, users familiar with Git can clone the repository and switch to the Deliverable 3 branch.
 
-2. Open a Terminal
+**2. Open a Terminal**
 
-Navigate to the extracted repository folder containing app.py, analyzer.py, and requirements.txt.
+Navigate to the extracted repository folder containing `app.py`, `analyzer.py`, and `requirements.txt`.
 
-3. Install Dependencies
+**3. Install Dependencies**
 
 Run:
 
+```bash
 python3 -m pip install -r requirements.txt
+```
 
-4. Launch the Dashboard
+**4. Launch the Dashboard**
 
 Run:
 
+```bash
 python3 -m streamlit run app.py
+```
 
-The dashboard should automatically open in your browser at http://localhost:8501.
+The dashboard should automatically open in your browser at `http://localhost:8501`.
 
-5. Analyze ADOP Logs
+**5. Analyze ADOP Logs**
 
 Upload a JSON or JSONL log file using the dashboard.
 
 The interface displays ranked security alerts, heuristic risk scores, provenance context, and supporting evidence. The FinTech Security Lead can select Approve, Investigate, or Hold, add reviewer notes, and export the decisions as JSON.
 
 The dashboard operates in passive Static mode and does not modify ADOP or block tool operations.
-
 ## 7. Detection and Provenance Analysis
 
 ### Detection Rules
