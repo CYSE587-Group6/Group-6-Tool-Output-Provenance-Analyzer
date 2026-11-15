@@ -87,7 +87,42 @@ python3 analyzer.py 'session-01(clean).jsonl' -o clean_results.json --review cle
 
 The analyzer reads the input logs without modifying ADOP, the agent, the model, MCP tools, or the execution environment.
 
-## 6. Detection and Provenance Analysis
+## 6. Security Review User Interface (PoC v0.5)
+
+The PoC includes a Streamlit frontend for the FinTech Security Lead to review security findings and make decisions.
+
+The interface supports uploading ADOP-derived JSON or JSONL logs, displaying ranked alerts and heuristic risk scores, examining provenance correlation and supporting evidence, and recording reviewer decisions (Approve, Investigate, or Hold).
+
+### Running the Interface
+
+Install the required dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Launch the dashboard:
+
+```bash
+python3 -m streamlit run app.py
+```
+
+The dashboard opens at `http://localhost:8501`.
+
+Upload an ADOP-derived log file to run the analysis.
+
+### Expected Results
+
+- **Clean session:** 10 records analyzed, 0 alerts.
+- **Poisoned session:** 12 records analyzed, 2 alerts.
+  - `git_diff`: HIGH risk, score 70.
+  - `git_show_worktree`: MEDIUM risk, score 45.
+
+Reviewers can inspect alert evidence, select a decision, add notes, and export their decisions as JSON.
+
+The interface operates in passive Static mode. It does not modify ADOP, block tool operations, or prove that correlated events are causally related.
+
+## 7. Detection and Provenance Analysis
 
 ### Detection Rules
 
@@ -109,7 +144,7 @@ When valid sequence numbers are unavailable, the analyzer falls back to input re
 
 **Important:** Correlation identifies possible relationships for investigation. It does not prove that retrieved content caused a subsequent tool operation.
 
-## 7. Testing and Evaluation
+## 8. Testing and Evaluation
 
 PoC v0.5 was evaluated using two ADOP JSONL test sessions.
 
@@ -143,7 +178,7 @@ For `git_show_worktree`, the analyzer identified earlier Fetch events in the sam
 
 The available Fetch content previews did not establish that malicious retrieved instructions caused either suspicious operation.
 
-## 8. Limitations
+## 9. Limitations
 
 - Detection relies on heuristic patterns and may produce false positives or false negatives.
 - Risk scores are indicators, not probabilities of an attack.
@@ -155,7 +190,7 @@ The available Fetch content previews did not establish that malicious retrieved 
 - The analyzer does not block suspicious actions or modify the ADOP environment.
 - All alerts require human review.
 
-## 9. Future Improvements
+## 10. Future Improvements
 
 Potential improvements include:
 
@@ -166,7 +201,7 @@ Potential improvements include:
 - Supporting more comprehensive retrieved-content analysis.
 - Improving security-review reporting and evidence presentation.
 
-## 10. Project Scope
+## 11. Project Scope
 
 This repository contains the Group 6 Tool Output Provenance & Injection Risk Analyzer.
 
@@ -174,7 +209,7 @@ The initial prototype was developed for Deliverable 2. PoC v0.5 builds on that w
 
 The implementation remains a passive monitoring prototype intended for security analysis and human review.
 
-## 11. Course Information
+## 12. Course Information
 
 **Course:** CYSE-587 — Cybersecurity Systems Engineering  
 **Institution:** George Mason University  
