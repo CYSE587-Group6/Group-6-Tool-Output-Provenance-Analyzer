@@ -217,7 +217,7 @@ This repository contains the Group 6 Tool Output Provenance & Injection Risk Ana
 
 The initial prototype was developed for Deliverable 2. PoC v0.5 builds on that work for Deliverable 3 by introducing stronger provenance context, sequence-aware event correlation, expanded evaluation documentation, and human-readable security review output.
 
-The implementation remains a passive monitoring prototype intended for security analysis and human review.
+This implementation is an initial proof of concept for Deliverable 2 & 3. Future work may include improved event correlation, evaluation across additional clean and poisoned scenarios, and refinement of risk scoring.
 
 ## 12. Course Information
 
