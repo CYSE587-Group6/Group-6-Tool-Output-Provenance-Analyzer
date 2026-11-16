@@ -1,4 +1,3 @@
-
 import json
 import re
 import argparse
@@ -71,7 +70,31 @@ def load_logs(file_path):
 
         return records
 
+def sanitize_record(record):
+    """Remove scenario labels and debugging metadata."""
+    excluded_fields = {
+        "scenario_tag",
+        "annotations",
+        "expected_alert",
+        "ground_truth",
+        "debug",
+    }
 
+    def clean(value):
+        if isinstance(value, dict):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if key not in excluded_fields
+            }
+
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+
+        return value
+
+    return clean(record)
+    
 def flatten_record(value, prefix=""):
     """Make nested log fields searchable."""
     fields = []
@@ -91,6 +114,26 @@ def flatten_record(value, prefix=""):
         fields.append((prefix, str(value)))
 
     return fields
+
+
+def get_fetch_content(record):
+    
+    """Extract the content preview from an ADOP Fetch event.
+    Do not treat filenames, paths, or metadata as injection text. """
+    tool_name = str(
+        get_value(record, "tool_name", "tool", "name", "method")
+        or ""
+    ).lower()
+
+    if "fetch" not in tool_name:
+        return ""
+
+    content = record.get("result_summary")
+
+    if not isinstance(content, str):
+        return ""
+
+    return content[:200]
 
 
 def get_value(record, *keys):
@@ -130,7 +173,6 @@ def analyze_record(record, index):
     searchable_text = "\n".join(
         f"{name}: {value}" for name, value in fields
     )
-    text_lower = searchable_text.lower()
 
     tool_name = (
         get_value(record, "tool_name", "tool", "name", "method")
@@ -140,7 +182,12 @@ def analyze_record(record, index):
     findings = []
     score = 0
 
+
+
+    
     # Check path-like fields for parent-directory traversal.
+    traversal_detected = False
+
     for field_name, value in fields:
         path_field = any(
             word in field_name.lower()
@@ -154,11 +201,19 @@ def analyze_record(record, index):
             findings.append({
                 "category": "path_traversal_pattern",
                 "evidence": (
-                    f"{field_name} contains a parent-directory "
-                    f"traversal pattern: {value[:180]}"
+                    "A parent-directory traversal pattern "
+                    "was detected in a path-related field."
                 ),
+                "evidence_field": field_name,
+                "evidence_record_index": index,
             })
-            score += 45
+
+            if not traversal_detected:
+                score += 45
+                traversal_detected = True
+
+
+
 
     # Check for potentially unsafe output arguments.
     tool_related = any(
@@ -176,24 +231,33 @@ def analyze_record(record, index):
         })
         score += 25
 
-    # Look for possible prompt-injection language.
+    
+    # Check retrieved Fetch content for possible prompt injection.
+    # Do not search filenames, paths, or debugging metadata.
+    fetch_content = get_fetch_content(record).lower()
+
     matched_phrases = [
         phrase for phrase in INJECTION_PHRASES
-        if phrase in text_lower
+        if phrase in fetch_content
     ]
 
     if matched_phrases:
         findings.append({
             "category": "prompt_injection_like_text",
             "evidence": (
-                "Possible instruction-override language: "
-                + ", ".join(matched_phrases[:3])
+                "Possible instruction-override language detected "
+                "in the Fetch result_summary content preview."
             ),
+            "matched_rule_count": len(matched_phrases),
         })
         score += 20
 
+
+
+    
     if not findings:
         return None
+
 
     score = min(score, 100)
 
@@ -213,15 +277,26 @@ def analyze_record(record, index):
             "Human review recommended; verify the source event, "
             "tool arguments, and intended target."
         ),
-        "raw_evidence": record,
-    }
+        "evidence_reference": {
+            "record_index": index,
+            "session_id": get_value(record, "session_id"),
+            "task_id": get_value(record, "task_id"),
+            "seq": record.get("seq"),
+    },
+ }
 
-
+    
 def correlate_events(records, alerts):
-    """Group events using IDs when available; do not infer causation."""
+    """ Correlate suspicious actions with earlier Fetch events
+    in the same task/session.
+
+    Correlation is not proof of causation."""
+   
     events_by_task = defaultdict(list)
+    events_by_session = defaultdict(list)
 
     for index, record in enumerate(records):
+
         task_id = get_value(
             record, "task_id", "session_id",
             "trace_id", "conversation_id"
@@ -229,66 +304,168 @@ def correlate_events(records, alerts):
 
         if task_id:
             events_by_task[task_id].append((index, record))
+            
+        session_id = get_value(record, "session_id")
+
+        if session_id:
+            events_by_session[session_id].append((index, record))
+
 
     for alert in alerts:
         task_id = alert.get("task_id")
+        alert_index = alert.get("record_index")
 
-        if not task_id:
+        
+        if not task_id or alert_index is None:
             alert["correlation"] = {
                 "status": "insufficient_identifiers",
-                "note": "No task/session ID is available for grouping.",
+                "note": "Cannot establish an event relationship."
             }
             continue
 
-        related_events = events_by_task[task_id]
+        # Find earlier Fetch events from the same session.
+        session_id = get_value(records[alert_index], "session_id")
+        session_sources = []
 
-        possible_sources = [
-            get_identity(record, index)
-            for index, record in related_events
-            if any(
-                name in (
-                    get_value(
-                        record, "tool_name", "tool", "name", "method"
-                    ) or ""
+        if session_id:
+            for index, record in events_by_session.get(session_id, []):
+                # Use ADOP sequence numbers when available.
+                alert_seq = records[alert_index].get("seq")
+                source_seq = record.get("seq")
+
+                if alert_seq is not None and source_seq is not None:
+                    try:
+                        if int(source_seq) >= int(alert_seq):
+                            continue
+                    except (ValueError, TypeError):
+                        if index >= alert_index:
+                            continue
+                elif index >= alert_index:
+                    continue
+
+                source_tool = (
+                    get_value(record, "tool_name", "tool", "name", "method")
+                    or ""
                 ).lower()
-                for name in SOURCE_TOOL_NAMES
-            )
+
+                if "fetch" not in source_tool:
+                    continue
+
+                # Keep same-task evidence separate from session context.
+                source_task = get_value(record, "task_id")
+                alert_task = get_value(records[alert_index], "task_id")
+
+                if source_task == alert_task:
+                    continue
+
+                session_sources.append({
+                    "record_index": index,
+                    "tool_name": source_tool,
+                    "seq": record.get("seq"),
+                    "relationship": "same_session_different_task",
+                })
+
+
+        related_events = events_by_task.get(task_id, [])
+
+        earlier_sources = []
+
+       
+        for index, record in related_events:
+            # Prefer ADOP sequence numbers when available.
+            alert_seq = records[alert_index].get("seq")
+            source_seq = record.get("seq")
+
+            if alert_seq is not None and source_seq is not None:
+                try:
+                    if int(source_seq) >= int(alert_seq):
+                        continue
+                except (ValueError, TypeError):
+                    # Fall back to input order if sequence values are invalid.
+                    if index >= alert_index:
+                        continue
+            elif index >= alert_index:
+                continue
+
+
+            tool_name = (
+                get_value(
+                    record, "tool_name", "tool", "name", "method"
+                ) or ""
+            ).lower()
+
+            if not any(
+                name in tool_name for name in SOURCE_TOOL_NAMES
+            ):
+                continue
+
+            fetch_content = get_fetch_content(record).lower()
+
+            matched_phrases = [
+                phrase for phrase in INJECTION_PHRASES
+                if phrase in fetch_content
+            ]
+
+            earlier_sources.append({
+                "record_index": index,
+                "tool_name": tool_name,
+                "suspicious_content_detected": bool(matched_phrases),
+                "matched_rule_count": len(matched_phrases),
+            })
+
+        suspicious_sources = [
+            source for source in earlier_sources
+            if source["suspicious_content_detected"]
         ]
 
-        if possible_sources:
-            status = "same_task_source_event_found"
+        if suspicious_sources:
+            status = "suspicious_prior_source_found"
             note = (
-                "A source-like event shares this task ID. "
-                "This is a candidate relationship, not proof of causation."
+                "A prior Fetch/source event contained suspicious "
+                "instruction-like content. A later action occurred "
+                "in the same task. This is a candidate relationship, "
+                "not proof of causation."
             )
-        elif len(related_events) > 1:
-            status = "same_task_only"
+        elif earlier_sources:
+            status = "prior_source_found"
             note = (
-                "Events share a task ID, but no source event "
-                "could be identified from the available fields."
+                "Earlier source events were found, but no "
+                "injection phrases were detected in their "
+                "available content previews."
             )
         else:
-            status = "single_record"
-            note = "No related records were found for this task ID."
+            status = "no_prior_source_found"
+            note = (
+                "No earlier source event could be identified "
+                "from the available records."
+            )
 
         alert["correlation"] = {
             "status": status,
             "related_record_count": len(related_events),
-            "possible_source_events": possible_sources,
+            "possible_source_events": earlier_sources,
+            "same_session_source_events": session_sources,
+            "same_session_source_count": len(session_sources),
             "note": note,
+
         }
 
 
+
 def analyze_logs(records):
+    clean_records = [
+        sanitize_record(record) for record in records
+    ]
+    
     alerts = []
 
-    for index, record in enumerate(records):
+    for index, record in enumerate(clean_records):
         alert = analyze_record(record, index)
 
         if alert:
             alerts.append(alert)
 
-    correlate_events(records, alerts)
+    correlate_events(clean_records, alerts)
 
     return {
         "tool_name": (
@@ -306,9 +483,65 @@ def analyze_logs(records):
             "Shared task IDs do not prove causation.",
             "Detection depends on the fields present in the logs.",
             "This prototype does not modify ADOP or block actions.",
+            "Source-to-action correlation uses available task IDs "
+            "and sequence numbers, with input-order fallback; "
+            "it does not prove causation.",
+
         ],
     }
 
+
+def create_review_summary(report):
+    """Create a readable security review summary."""
+    lines = [
+        "GROUP 6 - SECURITY-LEAD REVIEW",
+        "=" * 40,
+        f"Records analyzed: {report['records_analyzed']}",
+        f"Alerts found: {report['alerts_found']}",
+        f"Analysis mode: {report['analysis_mode']}",
+        "",
+    ]
+
+    if not report["alerts"]:
+        lines.append("No suspicious activity detected by current rules.")
+    else:
+        for number, alert in enumerate(report["alerts"], 1):
+            correlation = alert.get("correlation", {})
+
+            lines.extend([
+                f"ALERT {number}",
+                f"Tool: {alert['tool_name']}",
+                f"Risk: {alert['risk']}",
+                f"Heuristic score: {alert['heuristic_score']}",
+                f"Record index: {alert['record_index']}",
+                f"Task ID: {alert.get('task_id') or 'Unavailable'}",
+                f"Timestamp: {alert.get('timestamp') or 'Unavailable'}",
+                f"Correlation: {correlation.get('status', 'Unknown')}",
+                "Findings:",
+            ])
+
+            for finding in alert["findings"]:
+                lines.append(
+                    f"  - {finding['category']}: {finding['evidence']}"
+                )
+
+            lines.extend([
+                f"Same-task sources: "
+                f"{len(correlation.get('possible_source_events', []))}",
+                f"Cross-task session sources: "
+                f"{correlation.get('same_session_source_count', 0)}",
+                f"Recommendation: {alert['review_recommendation']}",
+                "-" * 40,
+            ])
+
+    lines.extend([
+        "",
+        "LIMITATIONS",
+        "Correlation does not prove causation.",
+        "Scores are heuristic, not attack probabilities.",
+    ])
+
+    return "\n".join(lines)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -322,12 +555,25 @@ def main():
         "-o", "--output",
         help="Optional path for the JSON results"
     )
+    
+    parser.add_argument(
+        "--review",
+        help="Optional path for the human-readable security review report"
+    )
+
     args = parser.parse_args()
 
     try:
         records = load_logs(args.input)
         report = analyze_logs(records)
         output = json.dumps(report, indent=2)
+
+        if args.review:
+            review_text = create_review_summary(report)
+            Path(args.review).write_text(
+                review_text + "\n", encoding="utf-8"
+            )
+            print(f"Security review saved to: {args.review}")
 
         if args.output:
             Path(args.output).write_text(
