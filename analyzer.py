@@ -1,7 +1,8 @@
 import json
 import re
 import argparse
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import posixpath
 from collections import defaultdict
 
 # Group 6: Tool Output Provenance & Injection Risk Analyzer
@@ -168,7 +169,32 @@ def get_identity(record, index):
             record, "result_status", "status"
         ),
     }
+def check_path_containment(path, base_dir, allowed_root):
+    """Check lexical containment within an authorized root."""
 
+    path = path.strip()
+
+    if not path:
+        return False
+
+    # Detect Windows absolute and drive-relative paths.
+    windows_path = PureWindowsPath(path)
+
+    if windows_path.drive or windows_path.root == "\\":
+        return True
+
+    # Normalize path separators and parent directories.
+    path = path.replace("\\", "/")
+
+    resolved_path = posixpath.normpath(
+        posixpath.join(base_dir, path)
+    )
+
+    allowed_root = posixpath.normpath(allowed_root)
+
+    return posixpath.commonpath(
+        [resolved_path, allowed_root]
+    ) != allowed_root
 
 def analyze_record(record, index):
     """Flag suspicious patterns and preserve supporting evidence."""
@@ -185,24 +211,62 @@ def analyze_record(record, index):
 
 
     
-    # Check path-like fields for parent-directory traversal.
+        # Check whether requested paths escape the repository.
+    allowed_root = "/testbed/testbed-repo"
+
+    # Assumed testbed layout; use verified server metadata
+    # when available.
+    base_dir = (
+        "/testbed"
+        if tool_name == "git_init"
+        else allowed_root
+    )
+
+    path_fields = {
+        "path", "paths", "pathspec", "filename",
+        "directory", "target_resource"
+    }
+
+    candidates = flatten_record(
+        record.get("arguments", {})
+    )
+
+    target = record.get("target_resource")
+
+    if isinstance(target, str):
+        candidates.append(("target_resource", target))
+
     traversal_detected = False
 
-    for field_name, value in fields:
-        path_field = any(
-            word in field_name.lower()
-            for word in (
-                "path", "pathspec", "target_resource",
-                "filename", "directory"
-            )
-        )
+    for field_name, value in candidates:
+        root_field = re.split(
+            r"[.\[]", field_name
+        )[0].lower()
 
-        if path_field and TRAVERSAL_PATTERN.search(value):
+        if root_field not in path_fields:
+            continue
+
+        # Extract paths from Git output options.
+        if root_field == "pathspec":
+            match = re.search(
+                r"--output(?:=|\s+)([^\s]+)", value
+            )
+
+            if match:
+                value = match.group(1)
+
+        # Ignore URLs and non-filesystem resources.
+        if "://" in value:
+            continue
+
+        if check_path_containment(
+            value, base_dir, allowed_root
+        ):
             findings.append({
-                "category": "path_traversal_pattern",
+                "category": "path_containment_violation",
                 "evidence": (
-                    "A parent-directory traversal pattern "
-                    "was detected in a path-related field."
+                    "The requested path resolves outside "
+                    "the assumed authorized repository."
                 ),
                 "evidence_field": field_name,
                 "evidence_record_index": index,
@@ -211,6 +275,7 @@ def analyze_record(record, index):
             if not traversal_detected:
                 score += 45
                 traversal_detected = True
+
 
 
         # Check command arguments, not file content or results.
