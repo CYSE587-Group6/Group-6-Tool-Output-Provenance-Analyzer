@@ -351,8 +351,8 @@ def analyze_record(record, index):
 
 
     
-       if not findings:
-           return None
+    if not findings:
+        return None
 
     # Adjust risk based on the observed operation outcome.
     base_score = score
