@@ -676,6 +676,88 @@ def assess_behavioral_injection(records, alerts):
             break
 
 
+def correlate_content_provenance(records, alerts):
+    """Compare Fetch previews with later tool arguments."""
+
+    for alert in alerts:
+        index = alert["record_index"]
+        action = records[index]
+
+        task_id = get_value(action, "task_id")
+        session_id = get_value(action, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        argument_fields = flatten_record(
+            action.get("arguments", {})
+        )
+
+        for source_index, source in enumerate(records):
+
+            if get_value(source, "task_id") != task_id:
+                continue
+
+            if get_value(source, "session_id") != session_id:
+                continue
+
+            try:
+                earlier = int(source["seq"]) < int(action["seq"])
+            except (KeyError, ValueError, TypeError):
+                earlier = source_index < index
+
+            if not earlier:
+                continue
+
+            if get_value(source, "result_status") != "success":
+                continue
+
+            preview = get_fetch_content(source)
+
+            if not preview:
+                continue
+
+            normalized_preview = " ".join(
+                preview.split()
+            ).lower()
+
+            for field_name, value in argument_fields:
+
+                normalized_value = " ".join(
+                    value.split()
+                ).lower()
+
+                # Require meaningful overlap rather than
+                # matching common words or short flags.
+                if len(normalized_value) < 12:
+                    continue
+
+                if normalized_value not in normalized_preview:
+                    continue
+
+                alert["findings"].append({
+                    "category": "content_provenance_overlap",
+                    "evidence": (
+                        "A later tool argument matches content "
+                        "in an earlier Fetch preview within "
+                        "the same task and session. "
+                        "This supports a possible provenance "
+                        "relationship, not confirmed causation."
+                    ),
+                    "source_record_index": source_index,
+                    "source_seq": source.get("seq"),
+                    "evidence_record_index": index,
+                    "evidence_field": f"arguments.{field_name}",
+                    "matched_length": len(normalized_value)
+                })
+
+                alert["content_provenance_match"] = True
+                break
+
+            if alert.get("content_provenance_match"):
+                break
+
+
 
 def analyze_logs(records):
     clean_records = [
@@ -690,9 +772,12 @@ def analyze_logs(records):
         if alert:
             alerts.append(alert)
 
-       correlate_events(clean_records, alerts)
+       
+    correlate_events(clean_records, alerts)
 
-       assess_behavioral_injection(clean_records, alerts)
+    assess_behavioral_injection(clean_records, alerts)
+
+    correlate_content_provenance(clean_records, alerts)
 
     # Rank alerts by final risk score, highest first.
     # Use record index as a consistent tie-breaker.
