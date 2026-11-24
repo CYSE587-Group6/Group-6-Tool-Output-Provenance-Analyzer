@@ -198,7 +198,7 @@ def check_path_containment(path, base_dir, allowed_root):
 
 def analyze_record(record, index):
     """Flag suspicious patterns and preserve supporting evidence."""
-   fields = flatten_record(record)
+    fields = flatten_record(record)
 
     tool_name = (
         get_value(record, "tool_name", "tool", "name", "method")
