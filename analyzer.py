@@ -612,7 +612,16 @@ def analyze_logs(records):
         if alert:
             alerts.append(alert)
 
-    correlate_events(clean_records, alerts)
+       correlate_events(clean_records, alerts)
+
+    # Rank alerts by final risk score, highest first.
+    # Use record index as a consistent tie-breaker.
+    alerts.sort(
+        key=lambda alert: (
+            -alert["heuristic_score"],
+            alert["record_index"]
+        )
+    )
 
     return {
         "tool_name": (
