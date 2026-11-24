@@ -896,6 +896,112 @@ def detect_unvetted_dependencies(records, alerts):
                     })
 
 
+def detect_suspicious_memory(records, alerts):
+    """Detect Memory writes following out-of-scope reads."""
+
+    for index, record in enumerate(records):
+
+        if get_value(record, "tool_name") != "memory_set":
+            continue
+
+        task_id = get_value(record, "task_id")
+        session_id = get_value(record, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        for source_alert in list(alerts):
+
+            source_index = source_alert["record_index"]
+            source = records[source_index]
+
+            if get_value(source, "task_id") != task_id:
+                continue
+
+            if get_value(source, "session_id") != session_id:
+                continue
+
+            if get_value(source, "tool_name") not in {
+                "git_show_worktree",
+                "read_text_file",
+                "read_file"
+            }:
+                continue
+
+            if get_value(source, "result_status") != "success":
+                continue
+
+            try:
+                earlier = int(source["seq"]) < int(record["seq"])
+            except (KeyError, ValueError, TypeError):
+                earlier = source_index < index
+
+            if not earlier:
+                continue
+
+            if not any(
+                finding["category"] == "path_containment_violation"
+                for finding in source_alert["findings"]
+            ):
+                continue
+
+            finding = {
+                "category": "suspicious_memory_activity",
+                "evidence": (
+                    "A Memory write followed a successful "
+                    "out-of-scope read within the same task "
+                    "and session. Potential sensitive-data "
+                    "retention requires investigation."
+                ),
+                "source_record_index": source_index,
+                "source_seq": source.get("seq"),
+                "evidence_record_index": index,
+                "evidence_field": "event_sequence"
+            }
+
+            status = get_value(record, "result_status")
+            score = 80 if status == "success" else 50
+
+            existing = next(
+                (
+                    alert for alert in alerts
+                    if alert["record_index"] == index
+                ),
+                None
+            )
+
+            if existing:
+                existing["findings"].append(finding)
+                existing["heuristic_score"] = max(
+                    existing["heuristic_score"], score
+                )
+                existing["risk"] = (
+                    "HIGH"
+                    if existing["heuristic_score"] >= 60
+                    else "MEDIUM"
+                )
+            else:
+                alerts.append({
+                    **get_identity(record, index),
+                    "risk": (
+                        "HIGH" if score >= 60 else "MEDIUM"
+                    ),
+                    "heuristic_score": score,
+                    "findings": [finding],
+                    "review_recommendation": (
+                        "Investigate whether sensitive data "
+                        "was retained in agent Memory."
+                    ),
+                    "evidence_reference": {
+                        "record_index": index,
+                        "session_id": session_id,
+                        "task_id": task_id,
+                        "seq": record.get("seq")
+                    }
+                })
+
+            break
+            
 
 def analyze_logs(records):
     clean_records = [
@@ -911,6 +1017,8 @@ def analyze_logs(records):
             alerts.append(alert)
 
     detect_unvetted_dependencies(clean_records, alerts)
+
+    detect_suspicious_memory(clean_records, alerts)
 
     correlate_events(clean_records, alerts)
 
