@@ -351,11 +351,59 @@ def analyze_record(record, index):
 
 
     
-    if not findings:
+       if not findings:
         return None
 
+    # Adjust risk based on the observed operation outcome.
+    base_score = score
 
-    score = min(score, 100)
+    result_status = str(
+        get_value(record, "result_status", "status") or ""
+    ).strip().lower()
+
+    result_summary = str(
+        record.get("result_summary") or ""
+    ).strip().lower()
+
+    outcome_adjustment = 0
+    outcome_reason = "No additional outcome evidence."
+
+    has_path_violation = any(
+        finding["category"] == "path_containment_violation"
+        for finding in findings
+    )
+
+    if result_status in {"error", "failed", "failure", "denied"}:
+        outcome_adjustment = -20
+        outcome_reason = (
+            "The suspicious operation reported failure. "
+            "The attempted action still requires review."
+        )
+
+    elif result_status == "success":
+
+        if tool_name == "git_diff" and result_summary in {
+            "(no changes)", "no changes"
+        }:
+            outcome_adjustment = -20
+            outcome_reason = (
+                "No changes were reported. "
+                "The suspected output write remains unverified."
+            )
+
+        elif (
+            tool_name in {"git_show_worktree", "read_text_file"}
+            and has_path_violation
+            and result_summary
+        ):
+            outcome_adjustment = 30
+            outcome_reason = (
+                "The operation returned content from a path "
+                "flagged as outside the authorized repository."
+            )
+
+    score = max(0, min(score + outcome_adjustment, 100))
+
 
     if score >= 60:
         risk = "HIGH"
@@ -368,6 +416,9 @@ def analyze_record(record, index):
         **get_identity(record, index),
         "risk": risk,
         "heuristic_score": score,
+        "base_score": base_score,
+        "outcome_adjustment": outcome_adjustment,
+        "outcome_reason": outcome_reason,
         "findings": findings,
         "review_recommendation": (
             "Human review recommended; verify the source event, "
