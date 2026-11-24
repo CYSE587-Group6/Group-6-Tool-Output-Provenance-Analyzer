@@ -22,9 +22,12 @@ TRAVERSAL_PATTERN = re.compile(
     r"(?:^|[/\\])\.\.(?:[/\\]|$)|\.\.[/\\]"
 )
 
-OUTPUT_PATTERN = re.compile(
-    r"(?:^|\s)--output(?:=|\s)|(?:^|\s)>\s*\S",
-    re.IGNORECASE,
+GIT_OUTPUT_PATTERN = re.compile(
+    r"(?:^|\s)--output(?:=|\s|$)"
+)
+
+SHELL_OUTPUT_PATTERN = re.compile(
+    r"(?:^|\s)(?:>>|>)\s*\S"
 )
 
 SOURCE_TOOL_NAMES = ("fetch", "browser", "web", "search", "retrieve")
@@ -169,10 +172,7 @@ def get_identity(record, index):
 
 def analyze_record(record, index):
     """Flag suspicious patterns and preserve supporting evidence."""
-    fields = flatten_record(record)
-    searchable_text = "\n".join(
-        f"{name}: {value}" for name, value in fields
-    )
+   fields = flatten_record(record)
 
     tool_name = (
         get_value(record, "tool_name", "tool", "name", "method")
@@ -213,25 +213,56 @@ def analyze_record(record, index):
                 traversal_detected = True
 
 
+        # Check command arguments, not file content or results.
+    arguments = record.get("arguments", {})
+    argument_fields = flatten_record(arguments)
+
+    git_argument_names = {
+        "pathspec", "args", "argv", "options",
+        "flags", "ref", "command"
+    }
+
+    shell_argument_names = {
+        "command", "cmd", "args", "argv", "script"
+    }
+
+    for field_name, value in argument_fields:
+        root_field = re.split(
+            r"[.\[]", field_name
+        )[0].lower()
+
+        suspicious = False
+
+        if tool_name.startswith("git_"):
+            if root_field in git_argument_names:
+                suspicious = bool(
+                    GIT_OUTPUT_PATTERN.search(value)
+                )
+
+        elif tool_name.startswith(("shell", "exec")):
+            if root_field in shell_argument_names:
+                suspicious = bool(
+                    SHELL_OUTPUT_PATTERN.search(value)
+                )
+
+        if suspicious:
+            findings.append({
+                "category": "suspicious_tool_argument",
+                "evidence": (
+                    "A potentially unsafe output option "
+                    "was detected in a command argument."
+                ),
+                "evidence_field": (
+                    f"arguments.{field_name}"
+                ),
+                "evidence_record_index": index,
+            })
+
+            score += 25
+            break
 
 
-    # Check for potentially unsafe output arguments.
-    tool_related = any(
-        word in tool_name
-        for word in ("git", "file", "filesystem", "shell", "exec")
-    )
 
-    if tool_related and OUTPUT_PATTERN.search(searchable_text):
-        findings.append({
-            "category": "suspicious_tool_argument",
-            "evidence": (
-                "A command/output-redirection-style argument "
-                "appears in a tool-related record."
-            ),
-        })
-        score += 25
-
-    
     # Check retrieved Fetch content for possible prompt injection.
     # Do not search filenames, paths, or debugging metadata.
     fetch_content = get_fetch_content(record).lower()
