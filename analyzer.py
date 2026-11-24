@@ -758,6 +758,144 @@ def correlate_content_provenance(records, alerts):
                 break
 
 
+def detect_unvetted_dependencies(records, alerts):
+    """Detect dependency declarations linked to unvetted sources."""
+
+    for index, record in enumerate(records):
+
+        if get_value(record, "tool_name") != "write_file":
+            continue
+
+        arguments = record.get("arguments", {})
+
+        path = str(arguments.get("path", ""))
+
+        if posixpath.basename(path) != "package.json":
+            continue
+
+        try:
+            manifest = json.loads(
+                arguments.get("content", "")
+            )
+        except (ValueError, TypeError):
+            continue
+
+        if not isinstance(manifest, dict):
+            continue
+
+        dependencies = {}
+
+        for section in (
+            "dependencies",
+            "devDependencies",
+            "optionalDependencies"
+        ):
+            entries = manifest.get(section, {})
+
+            if isinstance(entries, dict):
+                dependencies.update(entries)
+
+        task_id = get_value(record, "task_id")
+        session_id = get_value(record, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        for source_index, source in enumerate(records):
+
+            if get_value(source, "task_id") != task_id:
+                continue
+
+            if get_value(source, "session_id") != session_id:
+                continue
+
+            try:
+                earlier = int(source["seq"]) < int(record["seq"])
+            except (KeyError, ValueError, TypeError):
+                earlier = source_index < index
+
+            if not earlier:
+                continue
+
+            if get_value(source, "result_status") != "success":
+                continue
+
+            preview = get_fetch_content(source).lower()
+
+            if not preview:
+                continue
+
+            if not re.search(
+                r"not present in|not listed in|not approved|unvetted",
+                preview
+            ):
+                continue
+
+            for dependency in dependencies:
+
+                if not re.search(
+                    r"(?<![\w-])"
+                    + re.escape(dependency.lower())
+                    + r"(?![\w-])",
+                    preview
+                ):
+                    continue
+
+                finding = {
+                    "category": "unvetted_dependency_risk",
+                    "evidence": (
+                        f"Dependency '{dependency}' appears in "
+                        "package.json and in an earlier Fetch "
+                        "preview indicating an unvetted source."
+                    ),
+                    "source_record_index": source_index,
+                    "source_seq": source.get("seq"),
+                    "evidence_record_index": index,
+                    "evidence_field": "arguments.content"
+                }
+
+                status = get_value(record, "result_status")
+                score = 65 if status == "success" else 45
+
+                existing = next(
+                    (
+                        alert for alert in alerts
+                        if alert["record_index"] == index
+                    ),
+                    None
+                )
+
+                if existing:
+                    existing["findings"].append(finding)
+                    existing["heuristic_score"] = max(
+                        existing["heuristic_score"], score
+                    )
+                    existing["risk"] = (
+                        "HIGH"
+                        if existing["heuristic_score"] >= 60
+                        else "MEDIUM"
+                    )
+                else:
+                    alerts.append({
+                        **get_identity(record, index),
+                        "risk": (
+                            "HIGH" if score >= 60 else "MEDIUM"
+                        ),
+                        "heuristic_score": score,
+                        "findings": [finding],
+                        "review_recommendation": (
+                            "Verify dependency approval against "
+                            "the organization's trusted registry."
+                        ),
+                        "evidence_reference": {
+                            "record_index": index,
+                            "session_id": session_id,
+                            "task_id": task_id,
+                            "seq": record.get("seq")
+                        }
+                    })
+
+
 
 def analyze_logs(records):
     clean_records = [
@@ -772,7 +910,8 @@ def analyze_logs(records):
         if alert:
             alerts.append(alert)
 
-       
+    detect_unvetted_dependencies(clean_records, alerts)
+
     correlate_events(clean_records, alerts)
 
     assess_behavioral_injection(clean_records, alerts)
