@@ -1002,6 +1002,76 @@ def detect_suspicious_memory(records, alerts):
 
             break
             
+def redact_sensitive_data(value):
+    """Redact common credential patterns from analysis outputs."""
+
+    sensitive_keys = {
+        "password",
+        "passwd",
+        "secret",
+        "api_key",
+        "apikey",
+        "access_token",
+        "refresh_token",
+        "authorization",
+        "client_secret",
+        "private_key",
+        "credentials"
+    }
+
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if str(key).lower().replace("-", "_")
+                in sensitive_keys
+                else redact_sensitive_data(item)
+            )
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            redact_sensitive_data(item)
+            for item in value
+        ]
+
+    if isinstance(value, str):
+
+        # Redact labeled credentials.
+        value = re.sub(
+            r"""(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)""",
+            r"\1=[REDACTED]",
+            value
+        )
+
+        # Redact Bearer authentication tokens.
+        value = re.sub(
+            r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+",
+            "Bearer [REDACTED]",
+            value
+        )
+
+        # Redact credentials embedded in connection URLs.
+        value = re.sub(
+            r"(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@",
+            r"\1[REDACTED]@",
+            value
+        )
+
+        # Redact private key blocks.
+        value = re.sub(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?"
+            r"-----END [A-Z ]*PRIVATE KEY-----",
+            "[REDACTED PRIVATE KEY]",
+            value,
+            flags=re.DOTALL
+        )
+
+    return value
+
+
+
 
 def analyze_logs(records):
     clean_records = [
@@ -1044,7 +1114,12 @@ def analyze_logs(records):
         "analysis_mode": "passive_only",
         "records_analyzed": len(records),
         "alerts_found": len(alerts),
-        "alerts": alerts,
+        "alerts": redact_sensitive_data(alerts),
+        "privacy_controls": {
+            "redaction_enabled": True,
+            "redaction_scope": "alert_outputs",
+            "raw_logs_modified": False
+        },
         "limitations": [
             "Scores are heuristic indicators, not probabilities.",
             "A suspicious pattern is not proof of an attack.",
