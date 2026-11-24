@@ -211,7 +211,7 @@ def analyze_record(record, index):
 
 
     
-        # Check whether requested paths escape the repository.
+    # Check whether requested paths escape the repository.
     allowed_root = "/testbed/testbed-repo"
 
     # Assumed testbed layout; use verified server metadata
@@ -278,7 +278,7 @@ def analyze_record(record, index):
 
 
 
-        # Check command arguments, not file content or results.
+    # Check command arguments, not file content or results.
     arguments = record.get("arguments", {})
     argument_fields = flatten_record(arguments)
 
@@ -352,7 +352,7 @@ def analyze_record(record, index):
 
     
        if not findings:
-        return None
+           return None
 
     # Adjust risk based on the observed operation outcome.
     base_score = score
