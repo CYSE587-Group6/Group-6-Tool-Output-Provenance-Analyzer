@@ -598,6 +598,84 @@ def correlate_events(records, alerts):
         }
 
 
+def assess_behavioral_injection(records, alerts):
+    """Assess suspicious actions following external retrieval."""
+
+    for alert in alerts:
+        index = alert["record_index"]
+        action = records[index]
+
+        task_id = get_value(action, "task_id")
+        session_id = get_value(action, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        suspicious_action = any(
+            finding["category"] in {
+                "path_containment_violation",
+                "suspicious_tool_argument"
+            }
+            for finding in alert["findings"]
+        )
+
+        if not suspicious_action:
+            continue
+
+        for source_index, source in enumerate(records):
+
+            if get_value(source, "task_id") != task_id:
+                continue
+
+            if get_value(source, "session_id") != session_id:
+                continue
+
+            try:
+                earlier = int(source["seq"]) < int(action["seq"])
+            except (KeyError, ValueError, TypeError):
+                earlier = source_index < index
+
+            if not earlier:
+                continue
+
+            if not get_fetch_content(source):
+                continue
+
+            if get_value(source, "result_status") != "success":
+                continue
+
+            alert["findings"].append({
+                "category": "behavioral_injection_risk",
+                "evidence": (
+                    "A suspicious tool action followed external "
+                    "content retrieval within the same task. "
+                    "This indicates possible indirect prompt "
+                    "injection risk, not confirmed causation."
+                ),
+                "source_record_index": source_index,
+                "source_seq": source.get("seq"),
+                "evidence_record_index": index,
+                "evidence_field": "event_sequence"
+            })
+
+            alert["behavioral_adjustment"] = 15
+
+            score = min(
+                alert["heuristic_score"] + 15, 100
+            )
+
+            alert["heuristic_score"] = score
+
+            if score >= 60:
+                alert["risk"] = "HIGH"
+            elif score >= 35:
+                alert["risk"] = "MEDIUM"
+            else:
+                alert["risk"] = "LOW"
+
+            break
+
+
 
 def analyze_logs(records):
     clean_records = [
@@ -613,6 +691,8 @@ def analyze_logs(records):
             alerts.append(alert)
 
        correlate_events(clean_records, alerts)
+
+       assess_behavioral_injection(clean_records, alerts)
 
     # Rank alerts by final risk score, highest first.
     # Use record index as a consistent tie-breaker.
