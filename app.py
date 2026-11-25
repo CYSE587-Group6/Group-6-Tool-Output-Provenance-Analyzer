@@ -1,8 +1,9 @@
 
 import json
 import streamlit as st
+from datetime import datetime, timezone
 
-from analyzer import analyze_logs
+from analyzer import analyze_logs, redact_sensitive_data
 
 st.set_page_config(
     page_title="Group 6 Security Review",
@@ -75,6 +76,25 @@ if uploaded_file is not None:
     )
 
     high_count = sum(a["risk"] == "HIGH" for a in alerts)
+        log_hash = report["log_integrity"]["log_hash"]
+
+    if "decisions" not in st.session_state:
+        st.session_state.decisions = {}
+
+    st.sidebar.header("Review Governance")
+
+    reviewer_id = st.sidebar.text_input(
+        "Reviewer ID",
+        placeholder="Enter reviewer identifier",
+        key=f"reviewer_{log_hash}",
+    )
+
+    st.sidebar.caption("SHA-256 Log Fingerprint")
+    st.sidebar.code(log_hash, language=None)
+
+    st.sidebar.caption(
+        "Reviewer identifiers are self-reported."
+    )
 
     st.subheader("Analysis Overview")
 
@@ -150,31 +170,83 @@ if uploaded_file is not None:
 
                 st.markdown("#### Security Lead Decision")
 
-                decision_key = f"decision_{record_index}"
-                notes_key = f"notes_{record_index}"
+                                review_key = f"{log_hash}_{record_index}"
+
+                decision_key = f"decision_{review_key}"
+                notes_key = f"notes_{review_key}"
+
+                saved_review = st.session_state.decisions.get(
+                    review_key, {}
+                )
+
+                decision_options = [
+                    "Pending", "Approve", "Investigate", "Hold"
+                ]
 
                 decision = st.selectbox(
                     "Review decision",
-                    ["Pending", "Approve", "Investigate", "Hold"],
+                    decision_options,
+                    index=decision_options.index(
+                        saved_review.get("decision", "Pending")
+                    ),
                     key=decision_key,
                 )
 
                 notes = st.text_area(
                     "Reviewer notes",
+                    value=saved_review.get("reviewer_notes", ""),
                     key=notes_key,
                     placeholder="Document the reason for this decision.",
                 )
 
-                if "decisions" not in st.session_state:
-                    st.session_state.decisions = {}
+                if st.button(
+                    "Save Review Decision",
+                    key=f"save_{review_key}",
+                ):
+                    if not reviewer_id.strip():
+                        st.error("Enter a reviewer ID before saving.")
 
-                st.session_state.decisions[str(record_index)] = {
-                    "tool_name": tool,
-                    "risk": risk,
-                    "score": score,
-                    "decision": decision,
-                    "reviewer_notes": notes,
-                }
+                    elif decision == "Pending":
+                        st.error("Select a review decision before saving.")
+
+                    elif not notes.strip():
+                        st.error("Document the reason for your decision.")
+
+                    else:
+                        st.session_state.decisions[review_key] = {
+                            "log_hash": log_hash,
+                            "record_index": record_index,
+                            "evidence_reference": alert.get(
+                                "evidence_reference", {}
+                            ),
+                            "tool_name": tool,
+                            "risk": risk,
+                            "score": score,
+                            "decision": decision,
+                            "reviewer_id": reviewer_id.strip(),
+                            "reviewed_at_utc": datetime.now(
+                                timezone.utc
+                            ).isoformat(),
+                            "reviewer_notes": redact_sensitive_data(
+                                notes.strip()
+                            ),
+                        }
+
+                        st.success("Review decision saved.")
+
+                saved_review = st.session_state.decisions.get(
+                    review_key, {}
+                )
+
+                if saved_review:
+                    st.caption(
+                        f"Saved decision: "
+                        f"{saved_review['decision']} | "
+                        f"Reviewer: "
+                        f"{saved_review['reviewer_id']} | "
+                        f"UTC: "
+                        f"{saved_review['reviewed_at_utc']}"
+                    )
 
     st.subheader("Export Results")
 
@@ -185,24 +257,44 @@ if uploaded_file is not None:
         mime="application/json",
     )
 
-    if alerts:
-        decisions = {
-            str(alert["record_index"]): st.session_state.get(
-                "decisions", {}
-            ).get(str(alert["record_index"]), {})
+       if alerts:
+        decisions = [
+            st.session_state.decisions[
+                f"{log_hash}_{alert['record_index']}"
+            ]
             for alert in alerts
+            if f"{log_hash}_{alert['record_index']}"
+            in st.session_state.decisions
+        ]
+
+        review_report = {
+            "log_hash": log_hash,
+            "hash_algorithm": "SHA-256",
+            "records_analyzed": report["records_analyzed"],
+            "alerts_found": report["alerts_found"],
+            "reviews_completed": len(decisions),
+            "reviews_pending": len(alerts) - len(decisions),
+            "review_decisions": decisions,
         }
 
         st.download_button(
             "Download Security Review Decisions",
-            data=json.dumps(decisions, indent=2),
+            data=json.dumps(
+                redact_sensitive_data(review_report),
+                indent=2
+            ),
             file_name="security_review_decisions.json",
             mime="application/json",
+            disabled=not decisions,
         )
 
-    st.caption(
-        "Review decisions are recorded in the current session "
-        "and can be exported. They are not sent to ADOP."
+       st.caption(
+        "Saved review decisions are associated with the "
+        "analyzed log fingerprint, reviewer identifier, "
+        "and UTC timestamp. Decisions remain in the current "
+        "application session and can be exported. "
+        "Reviewer identity is self-reported. "
+        "No decisions are sent to ADOP."
     )
 else:
     st.write("Upload a log file to begin security analysis.")
