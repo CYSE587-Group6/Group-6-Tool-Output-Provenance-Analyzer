@@ -287,7 +287,7 @@ def analyze_record(record, index):
         if "://" in value:
             continue
 
-                if check_path_containment(
+        if check_path_containment(
             value, base_dir, allowed_root
         ):
             path_key = posixpath.normpath(
