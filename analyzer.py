@@ -35,31 +35,23 @@ SHELL_OUTPUT_PATTERN = re.compile(
 SOURCE_TOOL_NAMES = ("fetch", "browser", "web", "search", "retrieve")
 
 
-def load_logs(file_path):
-    """Load JSON arrays, JSON objects, or JSON Lines files."""
-    text = Path(file_path).read_text(encoding="utf-8")
+def parse_logs(text):
+    """Parse JSON objects, arrays, or JSON Lines."""
+
+    text = text.lstrip("\ufeff")
+
+    if not text.strip():
+        raise ValueError("The log file is empty.")
 
     try:
         data = json.loads(text)
 
-        if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
-
-        if isinstance(data, dict):
-            for key in ("events", "records", "logs", "data"):
-                if isinstance(data.get(key), list):
-                    return [
-                        item for item in data[key]
-                        if isinstance(item, dict)
-                    ]
-            return [data]
-
-        raise ValueError("JSON must contain an object or list.")
-
     except json.JSONDecodeError:
         records = []
 
-        for line_number, line in enumerate(text.splitlines(), 1):
+        for line_number, line in enumerate(
+            text.splitlines(), 1
+        ):
             if not line.strip():
                 continue
 
@@ -67,13 +59,47 @@ def load_logs(file_path):
                 record = json.loads(line)
             except json.JSONDecodeError as error:
                 raise ValueError(
-                    f"Invalid JSON on line {line_number}: {error.msg}"
+                    f"Invalid JSON on line {line_number}: "
+                    f"{error.msg}"
                 ) from error
 
-            if isinstance(record, dict):
-                records.append(record)
+            if not isinstance(record, dict):
+                raise ValueError(
+                    f"Record on line {line_number} "
+                    "must be a JSON object."
+                )
+
+            records.append(record)
 
         return records
+
+    if isinstance(data, dict):
+        for key in ("events", "records", "logs", "data"):
+            if isinstance(data.get(key), list):
+                data = data[key]
+                break
+        else:
+            return [data]
+
+    if isinstance(data, list):
+        if not all(isinstance(item, dict) for item in data):
+            raise ValueError(
+                "Every log record must be a JSON object."
+            )
+
+        return data
+
+    raise ValueError("Expected a JSON object or list.")
+
+
+def load_logs(file_path):
+    """Load log files using the shared parser."""
+
+    text = Path(file_path).read_text(encoding="utf-8-sig")
+
+    return parse_logs(text)
+
+
 
 def sanitize_record(record):
     """Remove scenario labels and debugging metadata."""
