@@ -44,10 +44,7 @@ if uploaded_file is not None:
         st.error(f"Unable to analyze file: {error}")
         st.stop()
 
-    alerts = sorted(
-        report["alerts"],
-        key=lambda item: item["heuristic_score"],
-        reverse=True,
+       alerts = report["alerts"]
     )
 
     high_count = sum(a["risk"] == "HIGH" for a in alerts)
@@ -73,14 +70,34 @@ if uploaded_file is not None:
 
     st.subheader("Analysis Overview")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Records Analyzed", report["records_analyzed"])
-    col2.metric("Alerts Found", report["alerts_found"])
-    col3.metric("High-Risk Alerts", high_count)
+       medium_count = sum(a["risk"] == "MEDIUM" for a in alerts)
+    low_count = sum(a["risk"] == "LOW" for a in alerts)
 
-    if not alerts:
-        st.success("No suspicious activity detected by current rules.")
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Records Analyzed", report["records_analyzed"])
+    col2.metric("Total Alerts", report["alerts_found"])
+    col3.metric("High Risk", high_count)
+    col4.metric("Medium Risk", medium_count)
+    col5.metric("Low Risk", low_count)
+
+    if high_count:
+        st.error(
+            "Recommended action: HOLD release pending "
+            "security investigation."
+        )
+    elif alerts:
+        st.warning(
+            "Recommended action: INVESTIGATE findings "
+            "before approving release."
+        )
     else:
+        st.success(
+            "No suspicious activity detected by current rules. "
+            "Continue standard release review."
+        )
+
+        if alerts:
         st.subheader("Ranked Security Alerts")
 
         for rank, alert in enumerate(alerts, 1):
