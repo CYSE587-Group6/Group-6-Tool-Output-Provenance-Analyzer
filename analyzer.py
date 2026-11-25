@@ -789,7 +789,7 @@ def correlate_content_provenance(records, alerts):
                 if len(normalized_value) < 12:
                     continue
 
-                                if field_name.startswith("content."):
+                if field_name.startswith("content."):
                     pattern = (
                         r"(?<![\w@./-])"
                         + re.escape(normalized_value)
