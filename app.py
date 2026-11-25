@@ -122,11 +122,57 @@ if uploaded_file is not None:
                     f"{alert.get('timestamp') or 'Unavailable'}"
                 )
 
-                st.markdown("#### Detection Evidence")
+                               st.markdown("#### Detection Evidence")
+
                 for finding in alert.get("findings", []):
-                    st.write(
-                        f"**{finding['category']}** — "
-                        f"{finding['evidence']}"
+                    category = finding["category"].replace(
+                        "_", " "
+                    ).title()
+
+                    st.markdown(f"**{category}**")
+                    st.write(finding["evidence"])
+
+                    if finding.get("evidence_field"):
+                        st.caption(
+                            f"Evidence field: "
+                            f"{finding['evidence_field']}"
+                        )
+
+                    if finding.get("source_record_index") is not None:
+                        source_index = finding["source_record_index"]
+                        source_seq = finding.get("source_seq")
+
+                        target_seq = alert.get(
+                            "evidence_reference", {}
+                        ).get("seq")
+
+                        source_col, arrow_col, target_col = (
+                            st.columns([4, 1, 4])
+                        )
+
+                        with source_col:
+                            st.info(
+                                f"Source Event\n\n"
+                                f"Record: {source_index}\n\n"
+                                f"Sequence: {source_seq}"
+                            )
+
+                        with arrow_col:
+                            st.markdown("### →")
+
+                        with target_col:
+                            st.warning(
+                                f"Flagged Action\n\n"
+                                f"Tool: {tool}\n\n"
+                                f"Sequence: {target_seq}"
+                            )
+
+                        st.caption(
+                            "Observed evidence relationship; "
+                            "not proof of causation."
+                        )
+
+                    st.divider()
                     )
 
                 st.markdown("#### Provenance Assessment")
