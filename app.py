@@ -44,11 +44,11 @@ if uploaded_file is not None:
         st.error(f"Unable to analyze file: {error}")
         st.stop()
 
-       alerts = report["alerts"]
-    )
+    alerts = report["alerts"]
+
 
     high_count = sum(a["risk"] == "HIGH" for a in alerts)
-        log_hash = report["log_integrity"]["log_hash"]
+    log_hash = report["log_integrity"]["log_hash"]
 
     if "decisions" not in st.session_state:
         st.session_state.decisions = {}
@@ -70,7 +70,7 @@ if uploaded_file is not None:
 
     st.subheader("Analysis Overview")
 
-       medium_count = sum(a["risk"] == "MEDIUM" for a in alerts)
+    medium_count = sum(a["risk"] == "MEDIUM" for a in alerts)
     low_count = sum(a["risk"] == "LOW" for a in alerts)
 
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -97,7 +97,7 @@ if uploaded_file is not None:
             "Continue standard release review."
         )
 
-        if alerts:
+    if alerts:
         st.subheader("Ranked Security Alerts")
 
         for rank, alert in enumerate(alerts, 1):
@@ -122,7 +122,7 @@ if uploaded_file is not None:
                     f"{alert.get('timestamp') or 'Unavailable'}"
                 )
 
-                               st.markdown("#### Detection Evidence")
+                st.markdown("#### Detection Evidence")
 
                 for finding in alert.get("findings", []):
                     category = finding["category"].replace(
@@ -173,7 +173,7 @@ if uploaded_file is not None:
                         )
 
                     st.divider()
-                    )
+
 
                 st.markdown("#### Provenance Assessment")
                 status = correlation.get("status", "unknown")
@@ -208,7 +208,7 @@ if uploaded_file is not None:
 
                 st.markdown("#### Security Lead Decision")
 
-                                review_key = f"{log_hash}_{record_index}"
+                review_key = f"{log_hash}_{record_index}"
 
                 decision_key = f"decision_{review_key}"
                 notes_key = f"notes_{review_key}"
@@ -295,7 +295,7 @@ if uploaded_file is not None:
         mime="application/json",
     )
 
-       if alerts:
+    if alerts:
         decisions = [
             st.session_state.decisions[
                 f"{log_hash}_{alert['record_index']}"
@@ -326,7 +326,7 @@ if uploaded_file is not None:
             disabled=not decisions,
         )
 
-       st.caption(
+    st.caption(
         "Saved review decisions are associated with the "
         "analyzed log fingerprint, reviewer identifier, "
         "and UTC timestamp. Decisions remain in the current "
