@@ -132,6 +132,29 @@ The malicious instructions were not visible within the available 200-character F
 - Zero observed false positives under the selected policy definition does not guarantee zero false positives in production.
 - The analyzer remains passive and does not prevent or block tool execution.
 
+## Telemetry Privacy and Reproducibility
+
+All six original live telemetry files were preserved locally and verified byte-for-byte against the original ADOP-generated files.
+
+Before publication, all 93 records underwent automated privacy screening. One local filesystem username was identified in session 20f050, clean sequence 8. The username was replaced with REDACTED_USER in a separate sanitized copy.
+
+The sanitized telemetry is available in `evaluation/live-sessions-sanitized/`.
+
+All six sanitized files were reanalyzed and compared against their original counterparts. The following remained unchanged:
+
+- Record counts
+- Alert counts
+- Flagged record indices
+- Risk classifications
+- Heuristic scores
+- Finding categories
+
+All six detection comparisons passed, preserving the 93 records and 12 alerts reported in this evaluation.
+
+The modified file has a different SHA-256 fingerprint from its original. Sanitization preserves the evaluated detection results but does not establish byte-for-byte equivalence.
+
+Automated privacy screening is not exhaustive. The current analyzer's credential redaction function does not automatically anonymize local filesystem usernames.
+
 ## Conclusion
 
 PoC v0.8 demonstrated the ability to identify attempted and successful containment violations, unvetted dependency sources, and unintended agent behavior across newly generated live telemetry.
