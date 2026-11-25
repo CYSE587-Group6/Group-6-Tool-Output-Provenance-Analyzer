@@ -1,0 +1,26 @@
+{
+  "tool_name": "Group 6 Tool Output Provenance & Injection Risk Analyzer",
+  "version": "0.8",
+  "analysis_mode": "passive_only",
+  "records_analyzed": 10,
+  "alerts_found": 0,
+  "alerts": [],
+  "log_integrity": {
+    "algorithm": "SHA-256",
+    "log_hash": "0f3bcef62cea1130358a367e3aaa53c708ea0a380a2a11c6c5c0e0a4dbe22ce7",
+    "hash_scope": "original_parsed_records"
+  },
+  "privacy_controls": {
+    "redaction_enabled": true,
+    "redaction_scope": "alert_outputs",
+    "raw_logs_modified": false
+  },
+  "limitations": [
+    "Scores are heuristic indicators, not probabilities.",
+    "A suspicious pattern is not proof of an attack.",
+    "Shared task IDs do not prove causation.",
+    "Detection depends on the fields present in the logs.",
+    "This prototype does not modify ADOP or block actions.",
+    "Source-to-action correlation uses available task IDs and sequence numbers, with input-order fallback; it does not prove causation."
+  ]
+}
