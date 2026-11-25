@@ -1,6 +1,7 @@
 import json
 import re
 import argparse
+import hashlib
 from pathlib import Path, PureWindowsPath
 import posixpath
 from collections import defaultdict
@@ -1071,9 +1072,22 @@ def redact_sensitive_data(value):
     return value
 
 
+def calculate_log_hash(records):
+    """Generate a SHA-256 fingerprint of parsed log records."""
 
+    serialized = json.dumps(
+        records,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False
+    )
+
+    return hashlib.sha256(
+        serialized.encode("utf-8")
+    ).hexdigest()
 
 def analyze_logs(records):
+    log_hash = calculate_log_hash(records)
     clean_records = [
         sanitize_record(record) for record in records
     ]
@@ -1115,6 +1129,11 @@ def analyze_logs(records):
         "records_analyzed": len(records),
         "alerts_found": len(alerts),
         "alerts": redact_sensitive_data(alerts),
+         "log_integrity": {
+            "algorithm": "SHA-256",
+            "log_hash": log_hash,
+            "hash_scope": "original_parsed_records"
+        },
         "privacy_controls": {
             "redaction_enabled": True,
             "redaction_scope": "alert_outputs",
