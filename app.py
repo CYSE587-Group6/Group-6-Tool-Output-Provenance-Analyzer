@@ -3,7 +3,11 @@ import json
 import streamlit as st
 from datetime import datetime, timezone
 
-from analyzer import analyze_logs, redact_sensitive_data
+from analyzer import (
+    analyze_logs,
+    redact_sensitive_data,
+    parse_logs
+)
 
 st.set_page_config(
     page_title="Group 6 Security Review",
@@ -26,40 +30,11 @@ uploaded_file = st.file_uploader(
 
 
 def parse_uploaded_logs(file):
+    """Parse uploaded logs using the shared analyzer parser."""
+
     text = file.getvalue().decode("utf-8-sig")
 
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        records = []
-        for line_number, line in enumerate(text.splitlines(), 1):
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as error:
-                raise ValueError(
-                    f"Invalid JSON on line {line_number}: {error.msg}"
-                ) from error
-            if not isinstance(record, dict):
-                raise ValueError("Each JSONL record must be an object.")
-            records.append(record)
-        return records
-
-    if isinstance(data, list):
-        return [item for item in data if isinstance(item, dict)]
-
-    if isinstance(data, dict):
-        for key in ("events", "records", "logs", "data"):
-            if isinstance(data.get(key), list):
-                return [
-                    item for item in data[key]
-                    if isinstance(item, dict)
-                ]
-        return [data]
-
-    raise ValueError("Expected a JSON object or list.")
-
+    return parse_logs(text)
 
 if uploaded_file is not None:
     try:
