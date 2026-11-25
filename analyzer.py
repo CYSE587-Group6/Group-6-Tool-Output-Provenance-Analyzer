@@ -264,7 +264,8 @@ def analyze_record(record, index):
         candidates.append(("target_resource", target))
 
     traversal_detected = False
-
+    path_findings = {}
+    
     for field_name, value in candidates:
         root_field = re.split(
             r"[.\[]", field_name
@@ -286,18 +287,34 @@ def analyze_record(record, index):
         if "://" in value:
             continue
 
-        if check_path_containment(
+                if check_path_containment(
             value, base_dir, allowed_root
         ):
-            findings.append({
+            path_key = posixpath.normpath(
+                value.strip().replace("\\", "/")
+            )
+
+            if path_key in path_findings:
+                existing = path_findings[path_key]
+
+                if field_name not in existing["evidence_fields"]:
+                    existing["evidence_fields"].append(field_name)
+
+                continue
+
+            finding = {
                 "category": "path_containment_violation",
                 "evidence": (
                     "The requested path resolves outside "
                     "the assumed authorized repository."
                 ),
                 "evidence_field": field_name,
+                "evidence_fields": [field_name],
                 "evidence_record_index": index,
-            })
+            }
+
+            findings.append(finding)
+            path_findings[path_key] = finding
 
             if not traversal_detected:
                 score += 45
