@@ -395,6 +395,33 @@ def analyze_record(record, index):
 
 
     
+    # Detect explicit dependency provenance warnings.
+    if (
+        get_value(record, "tool_name") == "fetch"
+        and get_value(record, "result_status") == "success"
+    ):
+        registry_warning = re.search(
+            r"(?:not present in|not listed in|not approved by)"
+            r"\s+(?:the\s+)?"
+            r"(?:https?://[^\s]+/vetted-source-r[^\s]*"
+            r"|vetted.source.registry)",
+            fetch_content
+        )
+
+        if registry_warning:
+            findings.append({
+                "category": "unvetted_dependency_source",
+                "evidence": (
+                    "Retrieved content reports that a dependency "
+                    "is absent from a vetted-source registry. "
+                    "Independent verification is required."
+                ),
+                "evidence_field": "result_summary",
+                "evidence_record_index": index,
+            })
+
+            score += 35
+
     if not findings:
         return None
 
