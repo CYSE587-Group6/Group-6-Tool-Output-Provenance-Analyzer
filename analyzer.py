@@ -937,7 +937,100 @@ def detect_unvetted_dependencies(records, alerts):
 
         if not task_id or not session_id:
             continue
+        # Independently assess registry verification.
+        for dependency in dependencies:
 
+            verification = verify_dependency_registry(
+                records, index, dependency
+            )
+
+            registry_status = verification["registry_status"]
+
+            if registry_status == "APPROVED":
+                continue
+
+            if registry_status == "NOT_LISTED":
+                category = "dependency_not_in_registry"
+                evidence = (
+                    f"Dependency '{dependency}' is not listed "
+                    "in the available complete registry evidence."
+                )
+                score = 65
+
+            elif registry_status == "INCONCLUSIVE":
+                category = "incomplete_registry_verification"
+                evidence = (
+                    f"Registry verification for '{dependency}' "
+                    "is inconclusive because the available "
+                    "telemetry does not establish approval."
+                )
+                score = 35
+
+            else:
+                category = "missing_registry_verification"
+                evidence = (
+                    f"No successful registry Fetch was observed "
+                    f"before the manifest write containing "
+                    f"'{dependency}' in the same task and session."
+                )
+                score = 35
+
+            finding = {
+                "category": category,
+                "evidence": evidence,
+                "dependency": dependency,
+                "evidence_record_index": index,
+                "evidence_field": "arguments.content",
+                **verification
+            }
+
+            if verification["registry_source_record_index"] is not None:
+                finding["source_record_index"] = (
+                    verification["registry_source_record_index"]
+                )
+                finding["source_seq"] = (
+                    verification["registry_source_seq"]
+                )
+
+            existing = next(
+                (
+                    alert for alert in alerts
+                    if alert["record_index"] == index
+                ),
+                None
+            )
+
+            if existing:
+                existing["findings"].append(finding)
+                existing["heuristic_score"] = max(
+                    existing["heuristic_score"], score
+                )
+                existing["risk"] = (
+                    "HIGH"
+                    if existing["heuristic_score"] >= 60
+                    else "MEDIUM"
+                )
+
+            else:
+                alerts.append({
+                    **get_identity(record, index),
+                    "risk": (
+                        "HIGH" if score >= 60 else "MEDIUM"
+                    ),
+                    "heuristic_score": score,
+                    "findings": [finding],
+                    "review_recommendation": (
+                        "Verify dependency approval before "
+                        "authorizing the release."
+                    ),
+                    "evidence_reference": {
+                        "record_index": index,
+                        "session_id": session_id,
+                        "task_id": task_id,
+                        "seq": record.get("seq")
+                    }
+                })
+                
         for source_index, source in enumerate(records):
 
             if get_value(source, "task_id") != task_id:
