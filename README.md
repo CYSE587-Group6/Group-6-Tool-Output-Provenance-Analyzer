@@ -1,227 +1,422 @@
 # Group 6 — Tool Output Provenance & Injection Risk Analyzer
 
-**CYSE-587 — Cybersecurity Systems Engineering**  
 **George Mason University | Fall 2026**  
-**Deliverable 3 — PoC v0.5**
+**CYSE-587 / SYST-687**  
+**Deliverable 4 — PoC v0.8**
 
 ## 1. Project Overview
 
-The Tool Output Provenance & Injection Risk Analyzer is a passive-only proof of concept (PoC) developed to analyze structured tool-call logs from the Agent Development and Orchestration Platform (ADOP) testbed.
+The Tool Output Provenance & Injection Risk Analyzer is a
+passive-only proof of concept developed to analyze structured
+tool-call telemetry from the Agent Development and
+Orchestration Platform (ADOP) testbed.
 
-The analyzer identifies potentially suspicious tool operations, including prompt-injection-like language, suspicious Git arguments, and path traversal patterns.
+The primary stakeholder is a FinTech Security Lead responsible
+for evaluating security risks before software release approval.
 
-PoC v0.5 extends the initial Deliverable 2 prototype with improved event correlation, ADOP sequence-number tracking, same-session provenance context, and human-readable security review reports.
+The prototype identifies suspicious tool operations, examines
+available source-to-action evidence, assigns heuristic risk
+scores, and supports evidence-informed human review.
 
-The analyzer does not modify ADOP, block tool execution, or prove that a cyberattack occurred.
+The analyzer does not modify ADOP, prevent tool execution,
+automatically block releases, or independently prove that
+a cyberattack occurred.
 
-## 2. Features
+## 2. Implemented Capabilities
 
-- Supports JSON and JSONL input files.
-- Analyzes structured tool-call records and available event metadata.
-- Detects suspicious path traversal patterns.
-- Identifies potentially unsafe command arguments and output redirection.
-- Searches available Fetch content previews for predefined prompt-injection phrases.
-- Assigns heuristic scores and HIGH, MEDIUM, or LOW risk classifications.
-- Correlates earlier source events with suspicious tool operations using task identifiers and sequence numbers.
-- Separately reports earlier Fetch events from different tasks within the same session.
-- Removes scenario labels and debugging metadata before detection.
-- Generates machine-readable JSON results.
-- Generates human-readable security-lead review reports.
-- Operates in passive-only mode.
+### Security Detection
 
-## 3. Requirements
+- Suspicious Git arguments and output redirection.
+- Relative and absolute path containment violations.
+- Prompt-injection indicators in available Fetch previews.
+- Behavioral injection risk assessment.
+- Unvetted dependency source detection.
+- Telemetry-based dependency registry verification.
+- Dependency risk propagation through Git staging and commits.
+- Suspicious Memory activity following out-of-scope reads.
+- Source code retention in agent Memory.
+
+### Evidence and Risk Assessment
+
+- Same-session and same-task event correlation.
+- Content-based source-to-action provenance.
+- Verified content overlap and matched content length.
+- Outcome-based heuristic risk scoring.
+- Consistent alert ranking.
+- Duplicate path finding reduction.
+- Record-level evidence references.
+
+### Privacy and Governance
+
+- Removal of scenario labels and debugging metadata before
+  detection.
+- Sensitive-data redaction in analysis outputs.
+- SHA-256 fingerprints of original parsed telemetry records.
+- Log-specific reviewer decisions.
+- Reviewer identification, justification, and UTC timestamps.
+- Machine-readable analysis and reviewer decision exports.
+
+### Stakeholder Interface
+
+- Streamlit security review dashboard.
+- HIGH, MEDIUM, and LOW risk classifications.
+- Evidence-based release recommendations.
+- Approve, Investigate, and Hold reviewer decisions.
+- Risk scoring and provenance explanations.
+
+## 3. Architecture
+
+The prototype follows a passive telemetry analysis workflow:
+
+ADOP telemetry
+    -> Shared JSON/JSONL parser
+    -> Log fingerprinting
+    -> Detection metadata sanitization
+    -> Security detection
+    -> Provenance and risk correlation
+    -> Alert ranking and output redaction
+    -> CLI or Streamlit interface
+    -> Human review and evidence export
+
+Only exported telemetry is consumed by the analyzer.
+The prototype does not access or modify ADOP servers.
+
+## 4. Requirements
 
 - Python 3
-- No additional third-party Python packages required.
+- Streamlit for the graphical interface
+- Python standard libraries for the core analyzer
 
-The implementation uses Python's standard libraries.
+Additional dependencies are listed in requirements.txt.
 
-## 4. Setup
+## 5. Installation
 
-1. Clone or download the repository.
-2. Open a terminal in the project directory.
-3. Verify that Python 3 is installed:
-
-   ```bash
-   python3 --version
-   ```
-
-4. Ensure `analyzer.py` and the ADOP test logs are available in the project directory, or provide their correct file paths.
-
-## 5. How to Run
-
-### Analyze the Clean ADOP Session
+Clone the Deliverable 4 branch:
 
 ```bash
-python3 analyzer.py 'session-01(clean).jsonl'
+git clone --branch Deliverable-4-poc-v0.8 https://github.com/CYSE587-Group6/Group-6-Tool-Output-Provenance-Analyzer.git
+cd Group-6-Tool-Output-Provenance-Analyzer
 ```
 
-### Analyze the Poisoned ADOP Session
+Create a virtual environment:
 
 ```bash
-python3 analyzer.py poisoned-file.jsonl
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Generate JSON Results
-
-```bash
-python3 analyzer.py poisoned-file.jsonl -o results.json
-```
-
-### Generate JSON and Security-Lead Reports
-
-```bash
-python3 analyzer.py poisoned-file.jsonl -o results.json --review security_review.txt
-```
-
-This command generates two output files:
-
-- **results.json:** Structured alerts containing risk classifications, heuristic scores, findings, evidence references, and provenance information.
-- **security_review.txt:** Human-readable report summarizing detected operations, severity levels, supporting evidence, and recommendations for human review.
-
-### Analyze the Clean Session and Save Reports
-
-```bash
-python3 analyzer.py 'session-01(clean).jsonl' -o clean_results.json --review clean_review.txt
-```
-
-The analyzer reads the input logs without modifying ADOP, the agent, the model, MCP tools, or the execution environment.
-
-## 6. Security Review User Interface (PoC v0.5)
-
-The PoC includes a Streamlit frontend for the FinTech Security Lead to review security findings and make decisions.
-
-The interface supports uploading ADOP-derived JSON or JSONL logs, displaying ranked alerts and heuristic risk scores, examining provenance correlation and supporting evidence, and recording reviewer decisions (Approve, Investigate, or Hold).
-
-### Running the Streamlit Interface
-
-**1. Download the Repository**
-
-- Open the GitHub repository and select the `Deliverable-3-poc-v0.5` branch.
-- Click **Code → Download ZIP**.
-- Extract the ZIP file to a folder on your computer.
-
-Alternatively, users familiar with Git can clone the repository and switch to the Deliverable 3 branch.
-
-**2. Open a Terminal**
-
-Navigate to the extracted repository folder containing `app.py`, `analyzer.py`, and `requirements.txt`.
-
-**3. Install Dependencies**
-
-Run:
+Install dependencies:
 
 ```bash
 python3 -m pip install -r requirements.txt
 ```
 
-**4. Launch the Dashboard**
+## 6. Running the Prototype
 
-Run:
+### Command-Line Analyzer
+
+Analyze the reference clean session:
+
+```bash
+python3 analyzer.py "session-01(clean).jsonl"
+```
+
+Analyze the reference poisoned session:
+
+```bash
+python3 analyzer.py poisoned-file.jsonl
+```
+
+View available command-line options:
+
+```bash
+python3 analyzer.py --help
+```
+
+### Streamlit Security Review Interface
 
 ```bash
 python3 -m streamlit run app.py
 ```
 
-The dashboard should automatically open in your browser at `http://localhost:8501`.
+Open the local Streamlit address displayed in the terminal.
 
-**5. Analyze ADOP Logs**
+Upload a JSON or JSONL telemetry file to view:
 
-Upload a JSON or JSONL log file using the dashboard.
+- Record and alert counts.
+- Risk classifications.
+- Release recommendations.
+- Detection evidence.
+- Source-to-action provenance.
+- Reviewer decision controls.
+- Downloadable analysis and decision reports.
 
-The interface displays ranked security alerts, heuristic risk scores, provenance context, and supporting evidence. The FinTech Security Lead can select Approve, Investigate, or Hold, add reviewer notes, and export the decisions as JSON.
+See [Demonstration Guide](docs/demo-guide.md) for the
+stakeholder-facing demonstration workflow.
 
-The dashboard operates in passive Static mode and does not modify ADOP or block tool operations.
-## 7. Detection and Provenance Analysis
+## 7. Risk Scoring and Review Recommendations
 
-### Detection Rules
+Risk scores are heuristic values between 0 and 100.
 
-The analyzer applies three primary detection categories:
+| Risk Level | Score |
+|---|---:|
+| LOW | 0–34 |
+| MEDIUM | 35–59 |
+| HIGH | 60–100 |
 
-1. **Path Traversal Detection:** Identifies parent-directory traversal patterns in path-related fields.
-2. **Suspicious Tool Argument Detection:** Identifies command-output and redirection patterns in tool-related records.
-3. **Prompt-Injection Phrase Detection:** Searches available Fetch `result_summary` previews for predefined instruction-override phrases.
+Scores incorporate detection indicators, observed tool
+outcomes, and applicable event correlations.
 
-Detected findings receive heuristic scores and risk classifications.
+Successful harmful operations can receive higher scores
+than unsuccessful attempts.
 
-### Provenance Correlation
+The dashboard recommends:
 
-The analyzer examines earlier source events using available ADOP task identifiers and sequence numbers.
+| Condition | Recommendation |
+|---|---|
+| No alerts | Continue standard review |
+| Alerts without HIGH risk | Investigate |
+| At least one HIGH risk alert | Hold release pending investigation |
 
-Source events within the same task are recorded as possible provenance relationships. Earlier Fetch events from different tasks within the same session are reported separately as contextual information.
+Recommendations support human decision-making and do not
+automatically enforce release restrictions.
 
-When valid sequence numbers are unavailable, the analyzer falls back to input record order.
+## 8. Dependency Registry Verification
 
-**Important:** Correlation identifies possible relationships for investigation. It does not prove that retrieved content caused a subsequent tool operation.
+The analyzer evaluates available registry evidence from
+earlier successful Fetch events within the same task
+and session.
 
-## 8. Testing and Evaluation
+| Status | Meaning |
+|---|---|
+| APPROVED | Dependency name observed in registry telemetry |
+| NOT_LISTED | Available complete registry evidence does not list the dependency |
+| NOT_CHECKED | No qualifying registry Fetch was observed |
+| INCONCLUSIVE | Available registry evidence is insufficient |
 
-PoC v0.5 was evaluated using two ADOP JSONL test sessions.
+The analyzer does not directly access the registry outside
+the supplied telemetry.
 
-| Test Session | Records Analyzed | Alerts Generated |
+Registry approval does not independently authenticate a
+package, publisher, version, or registry response.
+
+## 9. Evaluation Results
+
+### Reference Sessions
+
+| Session | Records | Alerts |
 |---|---:|---:|
-| Clean ADOP session | 10 | 0 |
-| Poisoned ADOP session | 12 | 2 |
+| Clean | 10 | 0 |
+| Poisoned | 12 | 8 |
+| Total | 22 | 8 |
 
-### Detected Suspicious Operations
+The poisoned reference session produced five HIGH and
+three MEDIUM alerts.
 
-| Tool Operation | Risk Level | Heuristic Score |
-|---|---|---:|
-| `git_diff` | HIGH | 70 |
-| `git_show_worktree` | MEDIUM | 45 |
+### Reference Detection Coverage
 
-Both annotated suspicious operations were detected.
+| Sequence | Observed Risk | v0.8 Result |
+|---|---|---|
+| 11 | Poisoned Fetch content | Missed |
+| 12 | Suspicious Git argument | HIGH |
+| 14 | Source code retention in Memory | MEDIUM |
+| 16 | Unvetted dependency source | MEDIUM |
+| 18 | Risky dependency modification | HIGH |
+| 19 | Risk propagation through staging | MEDIUM |
+| 20 | Risk propagation through commit | HIGH |
+| 21 | Successful out-of-scope file read | HIGH |
+| 22 | Suspicious Memory retention | HIGH |
 
-For these annotated test cases, the evaluation produced:
+Sequence 11 remains a known false negative because the
+available Fetch preview does not expose the injection payload.
 
-- **True Positives (TP):** 2
-- **False Positives (FP):** 0 observed in the clean session
-- **False Negatives (FN):** 0 for the two annotated suspicious operations
+### Live ADOP Sessions
 
-These results apply only to the evaluated test corpus and should not be interpreted as a general detection accuracy rate.
+Three live sessions were generated using the official
+ADOP testbed and the qwen2.5:7b model.
 
-### Provenance Evaluation
+| Session | Clean Records | Clean Alerts | Poisoned Records | Poisoned Alerts |
+|---|---:|---:|---:|---:|
+| 18bf08 | 15 | 1 | 17 | 4 |
+| 20f050 | 15 | 1 | 15 | 2 |
+| 73e266 | 16 | 0 | 15 | 4 |
+| Total | 46 | 2 | 47 | 10 |
 
-The analyzer identified an earlier same-task source event associated with the `git_diff` alert.
+Live evaluation totals:
 
-For `git_show_worktree`, the analyzer identified earlier Fetch events in the same session but belonging to different tasks.
+- 93 telemetry records.
+- 12 alerts.
+- 1 HIGH, 2 MEDIUM, and 9 LOW alerts.
 
-The available Fetch content previews did not establish that malicious retrieved instructions caused either suspicious operation.
+Clean-session labels do not guarantee that every observed
+operation is benign. Clean-session alerts were reviewed
+individually rather than automatically classified as
+false positives.
 
-## 9. Limitations
+### Combined Evaluation
 
-- Detection relies on heuristic patterns and may produce false positives or false negatives.
-- Risk scores are indicators, not probabilities of an attack.
-- Prompt-injection phrase detection is limited to the available Fetch content previews.
-- Malicious instructions outside the available preview may not be detected.
-- Source-to-action correlation does not prove causation.
-- Sequence-number correlation may fall back to input record order when sequence values are unavailable.
-- The evaluation corpus is small and does not establish production-level detection accuracy.
-- The analyzer does not block suspicious actions or modify the ADOP environment.
-- All alerts require human review.
+| Dataset | Records | Alerts |
+|---|---:|---:|
+| Reference | 22 | 8 |
+| Live | 93 | 12 |
+| Total | 115 | 20 |
 
-## 10. Future Improvements
+### Event-Level Evaluation Metrics
 
-Potential improvements include:
+The following results use retrospective analyst-defined
+security policy labels.
 
-- Expanding detection rules for additional prompt-injection techniques.
-- Improving source-to-action provenance verification.
-- Evaluating additional clean and poisoned ADOP sessions.
-- Refining heuristic scoring to reduce false positives.
-- Supporting more comprehensive retrieved-content analysis.
-- Improving security-review reporting and evidence presentation.
+| Metric | Reference | Live |
+|---|---:|---:|
+| True positives | 8 | 12 |
+| False positives | 0 | 0 |
+| False negatives | 1 | 2 |
+| True negatives | 13 | 79 |
+| Precision | 100% | 100% |
+| Recall | 88.89% | 85.71% |
+| Accuracy | 95.45% | 97.85% |
+| F1 score | 94.12% | 92.31% |
 
-## 11. Project Scope
+These metrics are conditional on the selected labeling
+policy and are not independently established ground truth.
 
-This repository contains the Group 6 Tool Output Provenance & Injection Risk Analyzer.
+Under an alternative live-session labeling policy that
+treats the failed absolute-path read as benign, precision
+decreases to 91.67% and recall is 84.62%.
 
-The initial prototype was developed for Deliverable 2. PoC v0.5 builds on that work for Deliverable 3 by introducing stronger provenance context, sequence-aware event correlation, expanded evaluation documentation, and human-readable security review output.
+Annotation-based recall is 75% for the reference session
+and 50% for the live sessions. Additional detections outside
+explicitly annotated events are documented separately.
 
-This implementation is an initial proof of concept for Deliverable 2 & 3. Future work may include improved event correlation, evaluation across additional clean and poisoned scenarios, and refinement of risk scoring.
+These results do not establish production-level detection
+accuracy or generalization to unseen attacks.
 
-## 12. Course Information
+## 10. Automated Regression Testing
 
-**Course:** CYSE-587 — Cybersecurity Systems Engineering  
-**Institution:** George Mason University  
-**Semester:** Fall 2026  
-**Project:** Group 6 — Tool Output Provenance & Injection Risk Analyzer
+Run the complete regression suite:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Run Python syntax validation:
+
+```bash
+python3 -m py_compile analyzer.py app.py
+```
+
+Final validation results:
+
+| Test Category | Tests Passed |
+|---|---:|
+| Parsing, fingerprinting, and privacy | 18 |
+| Security detection | 15 |
+| Provenance verification | 4 |
+| Registry verification | 8 |
+| Registry integration | 6 |
+| Deduplication | 4 |
+| Source detection | 5 |
+| Memory retention | 9 |
+| Dependency risk propagation | 12 |
+| Total | 81 |
+
+All 81 automated regression tests passed.
+
+Manual Streamlit validation also passed for all eight
+reference and live telemetry files.
+
+## 11. Example Outputs and Evaluation Evidence
+
+### Generated Analysis Outputs
+
+- [Reference clean analysis](examples/reference-clean-analysis.json)
+- [Reference poisoned analysis](examples/reference-poisoned-analysis.json)
+
+### Evaluation Documentation
+
+- [Reference evaluation](evaluation/reference-results.md)
+- [Live ADOP evaluation](evaluation/live-results.md)
+- [Streamlit interface validation](evaluation/interface-validation.md)
+- [Sanitized live telemetry](evaluation/live-sessions-sanitized/)
+- [Stakeholder demonstration guide](docs/demo-guide.md)
+
+The example analysis reports were generated directly
+from PoC v0.8 using the reference telemetry files.
+
+## 12. Privacy and Reviewer Accountability
+
+Analysis outputs apply sensitive-data redaction to
+recognized credential patterns.
+
+Live telemetry copies were sanitized before repository
+publication. The sanitized copies were verified to preserve
+record counts, alert counts, risk scores, and finding
+categories.
+
+SHA-256 fingerprints support evidence traceability but
+do not authenticate telemetry or establish a cryptographic
+chain of custody.
+
+Reviewer decisions are associated with the analyzed log
+fingerprint and individual alert. Saved decisions include
+reviewer identification, justification, and UTC timestamps.
+
+Reviewer identities are self-reported, and decisions are
+maintained in Streamlit session state rather than permanent,
+authenticated audit storage.
+
+## 13. Known Limitations
+
+- Fetch output previews may be truncated to 200 characters.
+- Hidden injection payloads cannot be directly detected.
+- Behavioral indicators do not establish malicious intent.
+- Provenance relationships do not independently prove causation.
+- Content matching and risk scores are heuristic.
+- Path containment uses assumed repository boundaries and
+  does not independently resolve runtime filesystem state.
+- Registry verification depends on available telemetry.
+- Dependency propagation does not independently verify
+  actual Git commit contents.
+- Redaction does not guarantee removal of all sensitive data.
+- Reviewer identities are not authenticated.
+- Reviewer decisions are not stored in an immutable audit log.
+- Evaluation labels are retrospective and not independent.
+- Repeated tool attempts are not independent attack samples.
+- The prototype does not automatically block tool execution
+  or software releases.
+
+## 14. Development Progression
+
+| Version | Deliverable | Development Focus |
+|---|---|---|
+| v0.1 | D2 | Initial telemetry analysis and risk detection |
+| v0.5 | D3 | Event correlation and stakeholder review interface |
+| v0.8 | D4 | Hardened detection, content provenance, registry verification, risk propagation, privacy, reviewer accountability, and expanded evaluation |
+
+The D4 prototype addresses technical feedback from earlier
+deliverables while explicitly documenting unresolved
+limitations.
+
+## 15. Future Development
+
+Potential V2 capabilities include:
+
+- CI/CD and pull-request review integration.
+- Authenticated reviewer identities.
+- Persistent and tamper-evident audit records.
+- Independently verified dependency provenance.
+- Improved telemetry completeness.
+- Broader evaluation with independently labeled datasets.
+- Policy-based release approval integration.
+
+These capabilities are proposed future work and are not
+implemented in PoC v0.8.
+
+## 16. Project References
+
+- [Official ADOP Testbed](https://github.com/GMU-CYSE/adop-cyse)
+- [ADOP Log Schema](https://github.com/GMU-CYSE/adop-cyse/blob/main/docs/LOG_SCHEMA.md)
+- [Group 6 D4 Repository](https://github.com/CYSE587-Group6/Group-6-Tool-Output-Provenance-Analyzer/tree/Deliverable-4-poc-v0.8)
+
+Developed for the George Mason University cybersecurity
+systems engineering capstone project.
