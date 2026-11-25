@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 st.title("Tool Output Provenance & Injection Risk Analyzer")
-st.caption("Group 6 | PoC v0.5 | Passive Static Analysis")
+st.caption("Group 6 | PoC v0.8 | Passive Telemetry Analysis")
 
 st.info(
     "Decision-support only. This tool does not block "
