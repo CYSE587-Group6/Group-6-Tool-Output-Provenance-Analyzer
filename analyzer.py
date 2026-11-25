@@ -824,6 +824,76 @@ def correlate_content_provenance(records, alerts):
             if alert.get("content_provenance_match"):
                 break
 
+def verify_dependency_registry(records, index, dependency):
+    """Assess registry verification using ADOP telemetry only."""
+
+    action = records[index]
+    task_id = get_value(action, "task_id")
+    session_id = get_value(action, "session_id")
+
+    registry_url = (
+        "https://intranet.example/vetted-source-registry"
+    )
+
+    result = {
+        "registry_status": "NOT_CHECKED",
+        "registry_source_seq": None,
+        "registry_source_record_index": None
+    }
+
+    if not task_id or not session_id:
+        return result
+
+    for source_index in range(index - 1, -1, -1):
+        source = records[source_index]
+
+        if get_value(source, "task_id") != task_id:
+            continue
+
+        if get_value(source, "session_id") != session_id:
+            continue
+
+        if get_value(source, "tool_name") != "fetch":
+            continue
+
+        if get_value(source, "result_status") != "success":
+            continue
+
+        arguments = source.get("arguments", {})
+
+        if arguments.get("url") != registry_url:
+            continue
+
+        preview = get_value(source, "result_summary") or ""
+
+        result["registry_source_seq"] = source.get("seq")
+        result["registry_source_record_index"] = source_index
+        result["registry_status"] = "INCONCLUSIVE"
+
+        if not preview.startswith("# Vetted Source Registry"):
+            return result
+
+        pattern = (
+            r"(?:^|\s)-\s+"
+            + re.escape(dependency)
+            + r"\s+\([^)]+\)"
+        )
+
+        if re.search(pattern, preview):
+            result["registry_status"] = "APPROVED"
+
+        elif (
+            len(preview) < 200
+            and "requires a supply-chain review" in preview
+            and "package.json" in preview
+        ):
+            result["registry_status"] = "NOT_LISTED"
+
+        return result
+
+    return result
+
+
 
 def detect_unvetted_dependencies(records, alerts):
     """Detect dependency declarations linked to unvetted sources."""
