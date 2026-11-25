@@ -420,3 +420,97 @@ implemented in PoC v0.8.
 
 Developed for the George Mason University cybersecurity
 systems engineering capstone project.
+
+## 17. Feedback-to-Change Traceability
+
+The following tables document the team's response to
+Deliverable 2 and Deliverable 3 feedback.
+
+Commit references identify implemented repository changes.
+Feedback involving the report, pitch, or future architecture
+is identified separately rather than attributed to unrelated
+code changes.
+
+### 17.1 Deliverable 2 Feedback
+
+| ID | Instructor Feedback | Change or Response | Commit Evidence | Status |
+|---|---|---|---|---|
+| D2-01 | Demonstrate provenance on real ADOP logs rather than relying on non-schema mock data. | Implemented behavioral correlation and content overlap using actual telemetry. Evaluated reference sessions and three live sessions. Mock data is not used for the reported evaluation metrics. Direct detection of hidden injection payloads remains limited. | `9761baa`, `d446973`, `0961df8`, `106e06d`, `414c7fe` | Partial |
+| D2-02 | Make the code match the report by removing scenario labels and debugging annotations before detection and from analysis outputs. | Implemented recursive detection metadata sanitization and regression tests for annotation-independent detection. | `85e8792`, `4c5e6f5` | Addressed |
+| D2-03 | Do not repeat sensitive content in alerts. | Added evidence references and sensitive-data redaction. Sanitized published live telemetry and verified that detection results were preserved. Redaction remains pattern-based. | `4d925cb`, `821224a`, `8f453d6` | Partial |
+| D2-04 | Restrict injection keyword checks to appropriate content fields and report true and false positives. | Restricted injection-text analysis to Fetch previews, improved argument-specific detection, and added behavioral assessment and evaluation metrics. Complete independent per-rule confusion matrices are not available. | `97fb18a`, `c366288`, `9761baa`, `eba4424`, `414c7fe` | Partial |
+| D2-05 | Design a stakeholder-facing security review experience instead of raw JSON. | Implemented a Streamlit dashboard with ranked alerts, provenance evidence, review recommendations, reviewer decisions, and exports. Validated eight telemetry files. | `3482e64`, `921bf71`, `cf0c0c2`, `29a69fe`, `0e59c1d` | Addressed |
+| D2-06 | Incorporate FinTech regulatory constraints into the report. | PCI DSS change-management considerations inform the pre-release review workflow. Regulatory applicability and governance reasoning belong in the architecture report. The prototype does not establish compliance. | `cf0c0c2`, `921bf71` support the review workflow | Partial; report-level requirement |
+| D2-07 | Apply STRIDE per interface and justify likelihood, impact, and threat ranking. | Outcome-based scoring distinguishes unsuccessful attempts from successful out-of-scope access. Interface-specific threat classification and likelihood-impact justification belong in the threat model and architecture report. | `300e5d5`, `0470a63` | Partial; report-level requirement |
+| D2-08 | Expand and align ATLAS, OWASP Agentic, and LLM framework mappings across the report and slides. | Detection coverage and limitations are documented to support accurate framework mappings. Framework alignment must be verified in the final report and pitch. | `eba4424`, `414c7fe` provide detection evidence | Report-level requirement |
+| D2-09 | Improve presentation details, readable diagrams, measurable validation targets, ownership, and team development history. | Added structured evaluation documentation, 81 regression tests, interface validation, and a demonstration guide. Report formatting and team ownership require separate verification. Repository maintenance remains centralized. | `eba4424`, `414c7fe`, `0e59c1d`, `1c28af5` | Partial |
+| D2-10 | Share the repository directly with the instructor. | The D4 repository link and full repository archive are required submission artifacts. Instructor access must be verified before submission. | Not a code change | Submission verification pending |
+
+### 17.2 Deliverable 3 Technical Feedback
+
+| ID | Instructor Feedback | Change or Response | Commit Evidence | Status |
+|---|---|---|---|---|
+| D3-T01 | Replace reliance on phrase matching with behavioral injection signals and content overlap. | Added behavioral assessment for suspicious argument and path operations following Fetch events in the same task and session. Added content-based provenance matching. The reference poisoned Fetch remains undetected because its payload is outside the preview. | `9761baa`, `d446973`, `0961df8`, `106e06d` | Partial |
+| D3-T02 | Restrict output-redirection checks to arguments and match dangerous Git options specifically. | Restricted suspicious argument checks to relevant Git and shell argument fields. Added regression coverage for harmless documentation content. | `c366288`, `4c5e6f5` | Addressed |
+| D3-T03 | Detect absolute paths and resolve paths against appropriate working-directory boundaries. | Implemented relative and absolute path containment checks, including Windows paths and special handling for git_init. Reduced duplicate path findings while preserving evidence fields. Actual runtime filesystem state is not independently verified. | `300e5d5`, `8fa3c3b`, `91606f6`, `351a935` | Partial |
+| D3-T04 | Incorporate operation outcomes into risk scoring. | Added outcome adjustments for unsuccessful operations, uncertain Git results, and successful out-of-scope reads. Reference sequence 21 scores 75 and sequence 12 scores 65. Added scoring explanations to the interface. | `0470a63`, `947fe2a` | Addressed |
+| D3-T05 | Cover unvetted dependencies, registry verification, suspicious Memory activity, and report TP, FP, and FN across annotated events. | Added dependency registry checks, manifest baseline comparison, explicit unvetted-source warnings, Memory retention detection, content overlap verification, and downstream Git risk propagation. Reported analyst-defined and annotation-based evaluation results, including missed events. | `0ee3a7c`, `34cfd76`, `00f1ed2`, `392511f`, `6becbdf`, `976e73c`, `5e5099a`, `5944d7e`, `eba4424`, `414c7fe` | Partial |
+| D3-T06 | Centralize alert ranking in the analyzer so CLI, JSON, and UI agree. | Moved score-based ranking into the shared analyzer with deterministic tie-breaking. | `98e77cf`, `921bf71` | Addressed |
+| D3-T07 | Make reviewer decisions durable and include reviewer identity, timestamp, and SHA-256 log fingerprint. | Added log-specific reviewer decisions, required reviewer identification and justification, UTC timestamps, SHA-256 fingerprints, and downloadable JSON decision records. Permanent authenticated audit storage is not implemented. | `a0debe1`, `cf0c0c2`, `0e59c1d` | Partial |
+| D3-T08 | Remove duplicated parsing between the analyzer and Streamlit. | Implemented a shared JSON/JSONL parser and reused it in the graphical interface. | `db98849`, `0dd0e9f`, `007b6e4` | Addressed |
+| D3-T09 | Add deterministic unit tests and reproducible reference-session tests. | Implemented 81 regression tests covering parsing, privacy, detection, provenance, registry verification, deduplication, source detection, Memory retention, and dependency risk propagation. | `65ddacf`, `4c5e6f5`, `1b757bd`, `2ea79eb`, `939560c`, `351a935`, `d5724f7`, `64adbda`, `7716995`, `4b0db13` | Addressed |
+
+### 17.3 Deliverable 3 Architecture and Formative Feedback
+
+| ID | Instructor Feedback | Change or Response | Commit Evidence | Status |
+|---|---|---|---|---|
+| D3-F01 | Include actual CVSS scores and vectors and explain their limitations in ADOP. | Outcome-based scoring provides contextual evidence beyond static vulnerability severity. CVSS vectors and contextual comparison must be documented in the final report. | `0470a63`, `eba4424` support contextual comparison | Report-level requirement |
+| D3-F02 | Apply NIST AI RMF at the subcategory level. | Privacy, evidence traceability, evaluation, and reviewer accountability provide implementation evidence for governance and measurement mappings. Specific subcategory mappings belong in the report. | `821224a`, `a0debe1`, `cf0c0c2`, `eba4424`, `414c7fe` | Report-level requirement |
+| D3-F03 | Trace mitigations to individual D2 threats rather than only STRIDE categories. | Added record-level evidence, specific detection findings, and regression tests. The final architecture report must explicitly map individual D2 threats to these controls and identify uncovered threats. | `29a69fe`, `eba4424`, `4c5e6f5` | Partial |
+| D3-F04 | Correct the contradiction claiming coverage of all six STRIDE categories. | README describes implemented capabilities and limitations without claiming complete STRIDE coverage. Denial-of-service detection is not an implemented capability. | Final D4 README | Repository documentation addressed; report verification pending |
+| D3-F05 | Show untrusted content entry points and the Streamlit interface in the architecture diagram. | Implemented source-to-action evidence presentation and a stakeholder-facing interface. The revised architecture diagram must show these components and trust boundaries. | `36beb04`, `29a69fe`, `0e59c1d` | Report-level requirement |
+| D3-F06 | Distinguish proposed architecture from implemented architecture. | README separates implemented v0.8 capabilities from future V2 capabilities. The report must preserve the same distinction. | `4075756`, `fc48d59`; final D4 README | Repository documentation addressed; report verification pending |
+| D3-F07 | Replace generic V2 roadmap phases with concrete future development milestones. | Existing testing and review-interface capabilities are treated as completed PoC work. Future development focuses on authenticated review, persistent audit storage, verified provenance, and CI/CD integration. | `0e59c1d`; final D4 README | Roadmap-level requirement |
+| D3-F08 | Identify the release control point, its owner, and failure behavior. | The proposed V2 control point is a CI/CD or pull-request approval gate owned by the release security function. Current v0.8 provides recommendations only. Ownership and failure policy require further design. | `921bf71`, `cf0c0c2` support the current review workflow | Future V2 |
+| D3-F09 | Provide a stronger justification for Static mode. | Passive retrospective analysis aligns with the stakeholder's pre-release evidence review and preserves the fixed ADOP environment. Live-generated telemetry expands evaluation without requiring active enforcement or testbed modification. | `414c7fe`, `0e59c1d` | Repository documentation addressed |
+| D3-F10 | Improve repository contribution history and team participation. | Repository history now documents incremental development, regression testing, evaluation, and interface improvements. Repository maintenance remains centralized and does not independently demonstrate contributions from every member. | D4 Git history | Partial |
+
+### 17.4 Deliverable 3 Demonstration and Shark Feedback
+
+| ID | Instructor Feedback | Change or Response | Commit Evidence | Status |
+|---|---|---|---|---|
+| D3-V01 | Demonstrate installation from a clean checkout. | Added current installation instructions and validated the cloned D4 repository. Recording installation evidence remains a presentation requirement. | Final D4 README | Partial |
+| D3-V02 | Present TP, FP, FN, and missed detections. | Documented reference and live evaluation metrics, alternative labeling assumptions, and known false negatives. | `eba4424`, `414c7fe` | Repository evidence addressed |
+| D3-V03 | Explain development progress and lessons learned since v0.1. | Documented the progression from v0.1 to v0.5 and v0.8, including expanded detection and unresolved limitations. The pitch must communicate this progression. | Final D4 README; `1c28af5` | Repository documentation addressed |
+| D3-V04 | Replace raw terminal JSON with an intentional stakeholder-facing demonstration. | Enhanced Streamlit scoring, evidence presentation, registry status, provenance, and reviewer workflow. Added a three-minute demonstration guide. | `947fe2a`, `29a69fe`, `0e59c1d`, `1c28af5` | Interface addressed; recording pending |
+| D3-V05 | Include the required results table in the report appendix. | Created reference, live, and interface validation tables for consistent reuse in the final report and pitch. | `eba4424`, `414c7fe`, `0e59c1d` | Repository evidence addressed |
+| D3-S01 | Deliver on the product name with a real content provenance link. | Reference sequence 18 contains dependency-name overlap with sequence 16. Sequence 22 contains verified content overlap with the out-of-scope read at sequence 21. These relationships support provenance but do not prove causation. | `0961df8`, `106e06d`, `1b757bd` | Addressed within available telemetry |
+| D3-S02 | Expand detection beyond the two Git CVE-pattern alerts. | Added unvetted dependency source detection, registry checks, dependency risk propagation, and Memory retention detection. Reference alerts increased from two in v0.5 to eight in v0.8. | `976e73c`, `392511f`, `5944d7e`, `34cfd76`, `5e5099a`, `eba4424` | Addressed |
+| D3-S03 | Show the release gate as a compelling product direction. | The demonstration shows a Security Lead placing a release recommendation on Hold with supporting evidence and reviewer justification. Actual CI/CD enforcement remains proposed V2 work. | `cf0c0c2`, `921bf71`, `1c28af5` | Partial |
+| D3-S04 | Show detection misses openly. | Explicitly documented the missed reference Fetch event and two missed live Fetch events, along with the 200-character preview limitation and annotation-based recall. | `eba4424`, `414c7fe` | Addressed |
+
+### 17.5 Traceability Summary
+
+The D4 implementation expands the prototype beyond the
+original two Git-related detections.
+
+Key improvements include:
+
+- Behavioral injection risk assessment.
+- Content-based provenance evidence.
+- Outcome-based risk scoring.
+- Dependency registry verification.
+- Dependency risk propagation.
+- Suspicious Memory retention detection.
+- Privacy and evidence fingerprinting controls.
+- Reviewer accountability.
+- Automated regression testing.
+- Expanded reference and live telemetry evaluation.
+- Stakeholder-facing interface improvements.
+
+The final prototype remains passive-only. Unresolved
+limitations and future development requirements are
+documented rather than presented as completed capabilities.
+
+The repository evidence supports the final report and
+pitch, but does not independently verify their completion.
