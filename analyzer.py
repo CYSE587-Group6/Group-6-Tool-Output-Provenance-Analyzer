@@ -1025,7 +1025,41 @@ def detect_suspicious_memory(records, alerts):
                 "evidence_record_index": index,
                 "evidence_field": "event_sequence"
             }
+            # Verify content overlap between the read and Memory write.
+            source_preview = get_value(
+                source, "result_summary"
+            ) or ""
 
+            arguments = record.get("arguments", {})
+            memory_value = arguments.get("value", "")
+
+            normalized_preview = " ".join(
+                source_preview.lower().split()
+            )
+
+            normalized_memory = " ".join(
+                str(memory_value).lower().split()
+            )
+
+            content_overlap = (
+                len(normalized_memory) >= 30
+                and normalized_memory in normalized_preview
+            )
+
+            finding["content_overlap_verified"] = content_overlap
+
+            if content_overlap:
+                finding["matched_length"] = len(normalized_memory)
+
+                finding["evidence_field"] = "arguments.value"
+
+                finding["evidence"] = (
+                    "Content stored in Memory matches content "
+                    "observed in an earlier successful "
+                    "out-of-scope read within the same task "
+                    "and session. Investigate unauthorized "
+                    "data retention."
+                )
             status = get_value(record, "result_status")
             score = 80 if status == "success" else 50
 
