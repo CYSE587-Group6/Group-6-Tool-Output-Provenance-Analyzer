@@ -1367,6 +1367,147 @@ def detect_suspicious_memory(records, alerts):
 
             break
             
+def detect_source_code_retention(records, alerts):
+    """Identify source code retained in agent Memory."""
+
+    code_extensions = {
+        ".js", ".ts", ".jsx", ".tsx", ".py",
+        ".java", ".c", ".cpp", ".go", ".rs",
+        ".cs", ".php", ".rb"
+    }
+
+    for index, record in enumerate(records):
+
+        if get_value(record, "tool_name") != "memory_set":
+            continue
+
+        if get_value(record, "result_status") != "success":
+            continue
+
+        task_id = get_value(record, "task_id")
+        session_id = get_value(record, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        arguments = record.get("arguments", {})
+        value = arguments.get("value", "")
+
+        if not isinstance(value, str):
+            continue
+
+        normalized_memory = " ".join(value.split())
+
+        if len(normalized_memory) < 100:
+            continue
+
+        for source_index in range(index - 1, -1, -1):
+
+            source = records[source_index]
+
+            if get_value(source, "task_id") != task_id:
+                continue
+
+            if get_value(source, "session_id") != session_id:
+                continue
+
+            if get_value(source, "tool_name") not in {
+                "read_text_file", "read_file",
+                "git_show_worktree"
+            }:
+                continue
+
+            if get_value(source, "result_status") != "success":
+                continue
+
+            try:
+                if int(source["seq"]) >= int(record["seq"]):
+                    continue
+            except (KeyError, ValueError, TypeError):
+                pass
+
+            source_path = source.get(
+                "arguments", {}
+            ).get("path", "")
+
+            if not isinstance(source_path, str):
+                continue
+
+            extension = posixpath.splitext(source_path)[1].lower()
+
+            if extension not in code_extensions:
+                continue
+
+            preview = get_value(
+                source, "result_summary"
+            ) or ""
+
+            normalized_preview = " ".join(preview.split())
+
+            if len(normalized_preview) < 100:
+                continue
+
+            if normalized_preview not in normalized_memory:
+                continue
+
+            finding = {
+                "category": "source_code_retention",
+                "evidence": (
+                    "A successful Memory write contains a "
+                    "substantial portion of an earlier source "
+                    "code read within the same task and session. "
+                    "Review whether retaining this code was "
+                    "necessary and authorized."
+                ),
+                "source_record_index": source_index,
+                "source_seq": source.get("seq"),
+                "evidence_record_index": index,
+                "evidence_field": "arguments.value",
+                "content_overlap_verified": True,
+                "matched_length": len(normalized_preview)
+            }
+
+            score = 50
+
+            existing = next(
+                (
+                    alert for alert in alerts
+                    if alert["record_index"] == index
+                ),
+                None
+            )
+
+            if existing:
+                existing["findings"].append(finding)
+                existing["heuristic_score"] = max(
+                    existing["heuristic_score"], score
+                )
+                existing["risk"] = (
+                    "HIGH"
+                    if existing["heuristic_score"] >= 60
+                    else "MEDIUM"
+                )
+            else:
+                alerts.append({
+                    **get_identity(record, index),
+                    "risk": "MEDIUM",
+                    "heuristic_score": score,
+                    "findings": [finding],
+                    "review_recommendation": (
+                        "Verify whether source code retention "
+                        "in agent Memory was authorized."
+                    ),
+                    "evidence_reference": {
+                        "record_index": index,
+                        "session_id": session_id,
+                        "task_id": task_id,
+                        "seq": record.get("seq")
+                    }
+                })
+
+            break
+
+
 def redact_sensitive_data(value):
     """Redact common credential patterns from analysis outputs."""
 
@@ -1467,6 +1608,8 @@ def analyze_logs(records):
     detect_unvetted_dependencies(clean_records, alerts)
 
     detect_suspicious_memory(clean_records, alerts)
+
+    detect_source_code_retention(clean_records, alerts)
 
     correlate_events(clean_records, alerts)
 
