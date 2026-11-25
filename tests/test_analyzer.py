@@ -1,121 +1,177 @@
-import json
+import copy
 import unittest
+from pathlib import Path
 
-from analyzer import (
-    parse_logs,
-    calculate_log_hash,
-    redact_sensitive_data,
-)
+from analyzer import analyze_logs, load_logs
 
 
-class TestLogParsing(unittest.TestCase):
-
-    def test_json_object(self):
-        records = parse_logs('{"seq": 1}')
-        self.assertEqual(records, [{"seq": 1}])
-
-    def test_json_array(self):
-        records = parse_logs('[{"seq": 1}, {"seq": 2}]')
-        self.assertEqual(len(records), 2)
-
-    def test_jsonl(self):
-        records = parse_logs('{"seq": 1}\n{"seq": 2}')
-        self.assertEqual(len(records), 2)
-
-    def test_wrapped_json(self):
-        records = parse_logs('{"events": [{"seq": 1}]}')
-        self.assertEqual(records, [{"seq": 1}])
-
-    def test_utf8_bom(self):
-        records = parse_logs('\ufeff{"seq": 1}')
-        self.assertEqual(records, [{"seq": 1}])
-
-    def test_invalid_json(self):
-        with self.assertRaises(ValueError):
-            parse_logs('{"seq":')
-
-    def test_invalid_record(self):
-        with self.assertRaises(ValueError):
-            parse_logs('[{"seq": 1}, 123]')
-
-    def test_empty_input(self):
-        with self.assertRaises(ValueError):
-            parse_logs("")
+ROOT = Path(__file__).resolve().parents[1]
 
 
-class TestLogIntegrity(unittest.TestCase):
+def load_reference_log(filename):
+    matches = sorted(ROOT.rglob(filename))
 
-    def test_identical_records(self):
-        records = [{"seq": 1}]
-        self.assertEqual(
-            calculate_log_hash(records),
-            calculate_log_hash(records)
+    if len(matches) != 1:
+        raise AssertionError(
+            f"Expected one reference file named {filename}, "
+            f"found {len(matches)}."
         )
 
-    def test_modified_record(self):
-        self.assertNotEqual(
-            calculate_log_hash([{"seq": 1}]),
-            calculate_log_hash([{"seq": 2}])
+    return load_logs(matches[0])
+
+
+class TestSecurityDetection(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.clean_records = load_reference_log(
+            "session-01(clean).jsonl"
         )
 
-    def test_key_order_independence(self):
-        self.assertEqual(
-            calculate_log_hash([{"a": 1, "b": 2}]),
-            calculate_log_hash([{"b": 2, "a": 1}])
+        cls.poisoned_records = load_reference_log(
+            "poisoned-file.jsonl"
         )
 
-    def test_record_order_matters(self):
-        self.assertNotEqual(
-            calculate_log_hash([{"seq": 1}, {"seq": 2}]),
-            calculate_log_hash([{"seq": 2}, {"seq": 1}])
-        )
+        cls.clean_report = analyze_logs(cls.clean_records)
+        cls.poisoned_report = analyze_logs(cls.poisoned_records)
 
-
-class TestSensitiveDataRedaction(unittest.TestCase):
-
-    def test_password_redaction(self):
-        result = redact_sensitive_data({
-            "password": "synthetic-password"
-        })
-        self.assertEqual(result["password"], "[REDACTED]")
-
-    def test_api_key_redaction(self):
-        result = redact_sensitive_data(
-            "api_key=synthetic-key"
-        )
-        self.assertNotIn("synthetic-key", result)
-
-    def test_bearer_token_redaction(self):
-        result = redact_sensitive_data(
-            "Bearer synthetic-token"
-        )
-        self.assertEqual(result, "Bearer [REDACTED]")
-
-    def test_connection_url_redaction(self):
-        result = redact_sensitive_data(
-            "postgres://user:password@localhost/db"
-        )
-        self.assertNotIn("user:password", result)
-
-    def test_preserve_evidence(self):
-        evidence = {
-            "record_index": 10,
-            "heuristic_score": 75,
-            "risk": "HIGH"
+        cls.alerts = {
+            alert["evidence_reference"]["seq"]: alert
+            for alert in cls.poisoned_report["alerts"]
         }
+
+    def assert_finding(self, seq, category):
+        self.assertIn(seq, self.alerts)
+
+        categories = {
+            finding["category"]
+            for finding in self.alerts[seq]["findings"]
+        }
+
+        self.assertIn(category, categories)
+
+    def test_clean_session(self):
         self.assertEqual(
-            redact_sensitive_data(evidence),
-            evidence
+            self.clean_report["records_analyzed"], 10
+        )
+        self.assertEqual(
+            self.clean_report["alerts_found"], 0
         )
 
-    def test_original_data_unchanged(self):
-        original = {"password": "synthetic-password"}
-        redact_sensitive_data(original)
+    def test_poisoned_session(self):
+        self.assertEqual(
+            self.poisoned_report["records_analyzed"], 12
+        )
+
+        self.assertTrue(
+            {12, 18, 21, 22}.issubset(self.alerts)
+        )
+
+    def test_git_argument_injection(self):
+        self.assert_finding(
+            12, "suspicious_tool_argument"
+        )
+
+    def test_harmless_output_mention(self):
+        records = [{
+            "tool_name": "write_file",
+            "arguments": {
+                "path": "README.md",
+                "content": "Documentation for --output"
+            },
+            "result_status": "success"
+        }]
+
+        report = analyze_logs(records)
+
+        self.assertEqual(report["alerts_found"], 0)
+
+    def test_path_containment(self):
+        self.assert_finding(
+            21, "path_containment_violation"
+        )
+
+    def test_outcome_score_reduction(self):
+        self.assertLess(
+            self.alerts[12]["outcome_adjustment"], 0
+        )
+
+    def test_outcome_score_increase(self):
+        self.assertGreater(
+            self.alerts[21]["outcome_adjustment"], 0
+        )
+
+    def test_behavioral_injection_risk(self):
+        self.assert_finding(
+            12, "behavioral_injection_risk"
+        )
+
+    def test_unvetted_dependency(self):
+        self.assert_finding(
+            18, "unvetted_dependency_risk"
+        )
+
+    def test_suspicious_memory(self):
+        self.assert_finding(
+            22, "suspicious_memory_activity"
+        )
+
+    def test_memory_source_reference(self):
+        findings = self.alerts[22]["findings"]
+
+        sources = [
+            finding.get("source_seq")
+            for finding in findings
+            if finding["category"]
+            == "suspicious_memory_activity"
+        ]
+
+        self.assertIn(21, sources)
+
+    def test_alert_ranking(self):
+        alerts = self.poisoned_report["alerts"]
+
+        expected = sorted(
+            alerts,
+            key=lambda alert: (
+                -alert["heuristic_score"],
+                alert["record_index"]
+            )
+        )
+
+        self.assertEqual(alerts, expected)
+
+    def test_score_bounds(self):
+        for alert in self.poisoned_report["alerts"]:
+            self.assertGreaterEqual(
+                alert["heuristic_score"], 0
+            )
+
+            self.assertLessEqual(
+                alert["heuristic_score"], 100
+            )
+
+    def test_annotation_independence(self):
+        records = copy.deepcopy(self.poisoned_records)
+
+        for record in records:
+            record.pop("annotations", None)
+            record.pop("scenario_tag", None)
+
+        report = analyze_logs(records)
 
         self.assertEqual(
-            original["password"],
-            "synthetic-password"
+            report["alerts"],
+            self.poisoned_report["alerts"]
         )
+
+    def test_original_records_unchanged(self):
+        records = copy.deepcopy(self.poisoned_records)
+        original = copy.deepcopy(records)
+
+        analyze_logs(records)
+
+        self.assertEqual(records, original)
 
 
 if __name__ == "__main__":
