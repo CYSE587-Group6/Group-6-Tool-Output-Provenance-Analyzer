@@ -185,6 +185,72 @@ if uploaded_file is not None:
                             f"{finding['evidence_field']}"
                         )
 
+                    if finding.get("evidence_fields"):
+                        st.caption(
+                            "Supporting evidence fields: "
+                            + ", ".join(finding["evidence_fields"])
+                        )
+
+                    if finding.get("content_overlap_verified") is True:
+                        st.success(
+                            "Content overlap verified in available telemetry."
+                        )
+
+                    elif finding.get("content_overlap_verified") is False:
+                        st.warning(
+                            "Content overlap not verified. "
+                            "Relationship is based on observed event context."
+                        )
+
+                    if finding.get("matched_length") is not None:
+                        st.write(
+                            f"**Matched content length:** "
+                            f"{finding['matched_length']} characters"
+                        )
+                        st.caption(
+                            "Matching content supports a provenance "
+                            "relationship but does not prove causation."
+                        )
+
+                    registry_labels = {
+                        "missing_registry_verification": (
+                            "NOT CHECKED"
+                        ),
+                        "incomplete_registry_verification": (
+                            "INCONCLUSIVE"
+                        ),
+                        "dependency_not_in_registry": (
+                            "NOT LISTED"
+                        )
+                    }
+
+                    registry_status = registry_labels.get(
+                        finding["category"]
+                    )
+
+                    if registry_status:
+                        st.warning(
+                            f"Registry verification: {registry_status}"
+                        )
+                        st.caption(
+                            "Assessment is limited to registry evidence "
+                            "available in the recorded telemetry."
+                        )
+
+                    if finding.get("risk_propagation"):
+                        st.warning(
+                            "Downstream dependency risk propagation detected."
+                        )
+                        st.write(
+                            f"**Original risky change:** "
+                            f"Sequence {finding.get('origin_seq')}"
+                        )
+                        st.caption(
+                            "Based on observed Git event sequences. "
+                            "Exact committed contents require "
+                            "independent verification."
+                        )
+
                     if finding.get("source_record_index") is not None:
                         source_index = finding["source_record_index"]
                         source_seq = finding.get("source_seq")
