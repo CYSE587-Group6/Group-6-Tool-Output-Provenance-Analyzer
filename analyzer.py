@@ -937,8 +937,62 @@ def detect_unvetted_dependencies(records, alerts):
 
         if not task_id or not session_id:
             continue
+                # Identify newly added dependencies when a complete
+        # previous manifest is available in telemetry.
+        previous_dependencies = None
+
+        for prior_index in range(index - 1, -1, -1):
+            prior = records[prior_index]
+
+            if get_value(prior, "task_id") != task_id:
+                continue
+
+            if get_value(prior, "session_id") != session_id:
+                continue
+
+            if get_value(prior, "tool_name") != "read_text_file":
+                continue
+
+            if get_value(prior, "result_status") != "success":
+                continue
+
+            prior_arguments = prior.get("arguments", {})
+
+            if prior_arguments.get("path") != path:
+                continue
+
+            preview = get_value(prior, "result_summary") or ""
+
+            try:
+                previous_manifest = json.loads(preview)
+            except (ValueError, TypeError):
+                break
+
+            if not isinstance(previous_manifest, dict):
+                break
+
+            previous_dependencies = set()
+
+            for section in (
+                "dependencies",
+                "devDependencies",
+                "optionalDependencies"
+            ):
+                entries = previous_manifest.get(section, {})
+
+                if isinstance(entries, dict):
+                    previous_dependencies.update(entries)
+
+            break
+
+        candidate_dependencies = {
+            name: version
+            for name, version in dependencies.items()
+            if previous_dependencies is None
+            or name not in previous_dependencies
+        }
         # Independently assess registry verification.
-        for dependency in dependencies:
+        for dependency in candidate_dependencies:
 
             verification = verify_dependency_registry(
                 records, index, dependency
@@ -979,6 +1033,9 @@ def detect_unvetted_dependencies(records, alerts):
                 "category": category,
                 "evidence": evidence,
                 "dependency": dependency,
+                "dependency_baseline_available": (
+                    previous_dependencies is not None
+                ),
                 "evidence_record_index": index,
                 "evidence_field": "arguments.content",
                 **verification
