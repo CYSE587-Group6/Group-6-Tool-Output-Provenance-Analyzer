@@ -1508,6 +1508,174 @@ def detect_source_code_retention(records, alerts):
             break
 
 
+def propagate_dependency_risk(records, alerts):
+    """Track risky dependency changes through Git operations."""
+
+    risk_categories = {
+        "unvetted_dependency_risk",
+        "dependency_not_in_registry"
+    }
+
+    alert_map = {
+        alert["record_index"]: alert
+        for alert in alerts
+    }
+
+    pending_changes = {}
+    staged_changes = {}
+
+    for index, record in enumerate(records):
+
+        task_id = get_value(record, "task_id")
+        session_id = get_value(record, "session_id")
+
+        if not task_id or not session_id:
+            continue
+
+        if get_value(record, "result_status") != "success":
+            continue
+
+        scope = (session_id, task_id)
+        tool = get_value(record, "tool_name")
+        arguments = record.get("arguments", {})
+
+        raw_path = arguments.get("path", "")
+
+        file_path = (
+            posixpath.normpath(raw_path)
+            if isinstance(raw_path, str) and raw_path
+            else None
+        )
+
+        if tool == "write_file" and file_path:
+
+            key = (scope, file_path)
+
+            # A later write supersedes the pending file state.
+            pending_changes.pop(key, None)
+
+            source_alert = alert_map.get(index)
+
+            if source_alert and any(
+                finding["category"] in risk_categories
+                for finding in source_alert["findings"]
+            ):
+                pending_changes[key] = index
+
+            continue
+
+        if tool == "git_add" and file_path:
+
+            key = (scope, file_path)
+
+            if key not in pending_changes:
+                staged_changes.pop(key, None)
+                continue
+
+            source_index = pending_changes[key]
+
+            staged_changes[key] = (source_index, index)
+
+            category = "risky_dependency_staged"
+            score = 50
+
+            evidence = (
+                "Git staged a manifest previously flagged "
+                "for dependency provenance risk within "
+                "the same task and session."
+            )
+
+            origin_index = source_index
+
+        elif tool == "git_commit":
+
+            candidates = [
+                (key, value)
+                for key, value in staged_changes.items()
+                if key[0] == scope
+            ]
+
+            if not candidates:
+                continue
+
+            key, (origin_index, source_index) = max(
+                candidates,
+                key=lambda item: item[1][1]
+            )
+
+            category = "risky_dependency_committed"
+            score = 65
+
+            evidence = (
+                "A successful Git commit followed staging "
+                "of a manifest with dependency provenance "
+                "risk. Exact commit contents require "
+                "independent verification."
+            )
+
+            for staged_key, _ in candidates:
+                staged_changes.pop(staged_key, None)
+
+        else:
+
+            if tool in {
+                "git_reset", "git_checkout",
+                "git_restore", "git_rm"
+            }:
+                for state in (pending_changes, staged_changes):
+                    for key in list(state):
+                        if key[0] == scope:
+                            state.pop(key, None)
+
+            continue
+
+        finding = {
+            "category": category,
+            "evidence": evidence,
+            "source_record_index": source_index,
+            "source_seq": records[source_index].get("seq"),
+            "origin_record_index": origin_index,
+            "origin_seq": records[origin_index].get("seq"),
+            "evidence_record_index": index,
+            "evidence_field": "event_sequence",
+            "risk_propagation": True
+        }
+
+        existing = alert_map.get(index)
+
+        if existing:
+            existing["findings"].append(finding)
+            existing["heuristic_score"] = max(
+                existing["heuristic_score"], score
+            )
+            existing["risk"] = (
+                "HIGH"
+                if existing["heuristic_score"] >= 60
+                else "MEDIUM"
+            )
+        else:
+            alert = {
+                **get_identity(record, index),
+                "risk": "HIGH" if score >= 60 else "MEDIUM",
+                "heuristic_score": score,
+                "findings": [finding],
+                "review_recommendation": (
+                    "Review dependency approval and Git "
+                    "change evidence before authorizing "
+                    "the release."
+                ),
+                "evidence_reference": {
+                    "record_index": index,
+                    "session_id": session_id,
+                    "task_id": task_id,
+                    "seq": record.get("seq")
+                }
+            }
+
+            alerts.append(alert)
+            alert_map[index] = alert
+
+
 def redact_sensitive_data(value):
     """Redact common credential patterns from analysis outputs."""
 
@@ -1606,6 +1774,8 @@ def analyze_logs(records):
             alerts.append(alert)
 
     detect_unvetted_dependencies(clean_records, alerts)
+
+    propagate_dependency_risk(clean_records, alerts)
 
     detect_suspicious_memory(clean_records, alerts)
 
