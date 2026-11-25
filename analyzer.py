@@ -719,7 +719,37 @@ def correlate_content_provenance(records, alerts):
         argument_fields = flatten_record(
             action.get("arguments", {})
         )
+        # Extract individual dependency names from package manifests.
+        arguments = action.get("arguments", {})
 
+        if (
+            get_value(action, "tool_name") == "write_file"
+            and posixpath.basename(
+                str(arguments.get("path", ""))
+            ) == "package.json"
+        ):
+            try:
+                manifest = json.loads(
+                    arguments.get("content", "")
+                )
+            except (ValueError, TypeError):
+                manifest = {}
+
+            if isinstance(manifest, dict):
+                for section in (
+                    "dependencies",
+                    "devDependencies",
+                    "optionalDependencies"
+                ):
+                    entries = manifest.get(section, {})
+
+                    if isinstance(entries, dict):
+                        for dependency in entries:
+                            argument_fields.append((
+                                f"content.{section}.{dependency}",
+                                dependency
+                            ))
+                            
         for source_index, source in enumerate(records):
 
             if get_value(source, "task_id") != task_id:
@@ -759,7 +789,17 @@ def correlate_content_provenance(records, alerts):
                 if len(normalized_value) < 12:
                     continue
 
-                if normalized_value not in normalized_preview:
+                                if field_name.startswith("content."):
+                    pattern = (
+                        r"(?<![\w@./-])"
+                        + re.escape(normalized_value)
+                        + r"(?![\w@./-])"
+                    )
+
+                    if not re.search(pattern, normalized_preview):
+                        continue
+
+                elif normalized_value not in normalized_preview:
                     continue
 
                 alert["findings"].append({
